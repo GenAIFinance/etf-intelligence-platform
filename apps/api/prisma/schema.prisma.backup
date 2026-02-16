@@ -1,0 +1,257 @@
+// Prisma schema for ETF Intelligence
+// Production-ready schema with comprehensive investment details
+// SQLite for local dev, easily switchable to PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// CORE ETF MODEL
+// ============================================================================
+
+model Etf {
+  id            Int                @id @default(autoincrement())
+  ticker        String             @unique
+  name          String
+  exchange      String
+  country       String
+  currency      String
+  assetClass    String?
+  strategyType  String?            // Morningstar Category
+  summary       String?
+  
+  // ========================================================================
+  // INVESTMENT DETAILS - Added Feb 2025
+  // ========================================================================
+  
+  // Investment Philosophy & Strategy
+  investmentPhilosophy String?      // Full description of investment approach
+  benchmarkIndex       String?      // Primary benchmark (e.g., "S&P 500", "NASDAQ-100")
+  
+  // Asset Allocation Percentages (must sum to ~100%)
+  equityAllocation     Float?       // Stock allocation %
+  bondAllocation       Float?       // Fixed income allocation %
+  cashAllocation       Float?       // Cash & equivalents %
+  otherAllocation      Float?       // Commodities, alternatives, etc. %
+  
+  // Market Cap Breakdown - Morningstar Style Box (must sum to ~100% for equity)
+  megaCapAllocation    Float?       // > $200B market cap %
+  bigCapAllocation     Float?       // $10B - $200B (Large Cap) %
+  mediumCapAllocation  Float?       // $2B - $10B (Mid Cap) %
+  smallCapAllocation   Float?       // $300M - $2B (Small Cap) %
+  microCapAllocation   Float?       // < $300M market cap %
+  
+  // Valuations & Growth Metrics - Portfolio-weighted averages
+  priceToBook          Float?       // P/B Ratio
+  priceToSales         Float?       // P/S Ratio
+  priceToCashFlow      Float?       // P/CF Ratio
+  projectedEarningsGrowth Float?    // Forward earnings growth %
+  
+  // ========================================================================
+  // EXISTING CORE METRICS
+  // ========================================================================
+  
+  turnover      Float?               // Annual holdings turnover %
+  aum           Float?               // Assets under management (USD)
+  inceptionDate DateTime?            // ETF launch date
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  // ========================================================================
+  // RELATIONSHIPS
+  // ========================================================================
+  
+  sectorWeights           EtfSectorWeight[]
+  holdings                EtfHolding[]
+  metrics                 EtfMetricSnapshot[]
+  newsImpacts             NewsImpact[]
+  holdingClassifications  HoldingClassification[]
+
+  // ========================================================================
+  // INDEXES FOR PERFORMANCE
+  // ========================================================================
+  
+  @@index([ticker])
+  @@index([assetClass])
+  @@index([strategyType])
+  @@index([country])
+  @@index([aum])
+  @@index([inceptionDate])
+}
+
+// ============================================================================
+// SECTOR & HOLDINGS
+// ============================================================================
+
+model EtfSectorWeight {
+  id       Int      @id @default(autoincrement())
+  etfId    Int
+  sector   String
+  weight   Float    // Percentage allocation
+  asOfDate DateTime
+
+  etf Etf @relation(fields: [etfId], references: [id], onDelete: Cascade)
+
+  @@unique([etfId, sector, asOfDate])
+  @@index([etfId])
+  @@index([sector])
+}
+
+model EtfHolding {
+  id            Int      @id @default(autoincrement())
+  etfId         Int
+  holdingTicker String
+  holdingName   String
+  weight        Float    // Percentage allocation
+  sector        String?
+  industry      String?
+  asOfDate      DateTime
+
+  etf Etf @relation(fields: [etfId], references: [id], onDelete: Cascade)
+
+  @@unique([etfId, holdingTicker, asOfDate])
+  @@index([etfId])
+  @@index([holdingTicker])
+  @@index([sector])
+  @@index([asOfDate])
+}
+
+// ============================================================================
+// PRICE DATA
+// ============================================================================
+
+model PriceBar {
+  id            Int      @id @default(autoincrement())
+  symbol        String
+  date          DateTime
+  open          Float
+  high          Float
+  low           Float
+  close         Float
+  volume        Float
+  adjustedClose Float
+
+  @@unique([symbol, date])
+  @@index([symbol])
+  @@index([symbol, date])
+  @@index([date])
+}
+
+// ============================================================================
+// PERFORMANCE METRICS & ANALYTICS
+// ============================================================================
+
+model EtfMetricSnapshot {
+  id                  Int      @id @default(autoincrement())
+  etfId               Int
+  asOfDate            DateTime
+  trailingReturnsJson String   // JSON: { "1m": X, "3m": Y, "1y": Z, "3y": A, "5y": B }
+  volatility          Float?   // Annualized standard deviation
+  sharpe              Float?   // Sharpe ratio
+  maxDrawdown         Float?   // Maximum drawdown %
+  beta                Float?   // Beta vs benchmark
+  rsi14               Float?   // 14-day RSI
+  ma20                Float?   // 20-day moving average
+  ma50                Float?   // 50-day moving average
+  ma200               Float?   // 200-day moving average
+  hi52w               Float?   // 52-week high
+  lo52w               Float?   // 52-week low
+  latestPrice         Float?   // Most recent close price
+
+  etf Etf @relation(fields: [etfId], references: [id], onDelete: Cascade)
+
+  @@unique([etfId, asOfDate])
+  @@index([etfId])
+  @@index([asOfDate])
+}
+
+// ============================================================================
+// NEWS & INTELLIGENCE
+// ============================================================================
+
+model NewsItem {
+  id          Int      @id @default(autoincrement())
+  source      String
+  title       String
+  url         String   @unique
+  publishedAt DateTime
+  snippet     String?
+  rawJson     String?  // Full JSON payload from source
+
+  topics  NewsTopic[]
+  impacts NewsImpact[]
+
+  @@index([publishedAt])
+  @@index([source])
+}
+
+model NewsTopic {
+  id            Int     @id @default(autoincrement())
+  newsItemId    Int
+  topicLabel    String
+  keywordsJson  String  // JSON array: ["keyword1", "keyword2", ...]
+  embeddingJson String? // JSON array: [0.123, 0.456, ...] (optional vector embedding)
+
+  newsItem NewsItem @relation(fields: [newsItemId], references: [id], onDelete: Cascade)
+
+  @@index([newsItemId])
+  @@index([topicLabel])
+}
+
+model NewsImpact {
+  id                  Int    @id @default(autoincrement())
+  newsItemId          Int
+  etfId               Int
+  impactScore         Float  // 0-100 relevance score
+  rationale           String // LLM-generated explanation
+  matchedHoldingsJson String // JSON: ["AAPL", "MSFT", ...]
+  matchedThemesJson   String // JSON: ["tech", "healthcare", ...]
+
+  newsItem NewsItem @relation(fields: [newsItemId], references: [id], onDelete: Cascade)
+  etf      Etf      @relation(fields: [etfId], references: [id], onDelete: Cascade)
+
+  @@unique([newsItemId, etfId])
+  @@index([newsItemId])
+  @@index([etfId])
+  @@index([impactScore])
+}
+
+// ============================================================================
+// THEMATIC CLASSIFICATION
+// ============================================================================
+
+model HoldingClassification {
+  id              Int      @id @default(autoincrement())
+  etfId           Int
+  holdingTicker   String
+  holdingName     String
+  themesJson      String   // JSON: [{ "themeId": "AI", "confidence": 0.95 }, ...]
+  classifiedAt    DateTime @default(now())
+
+  etf Etf @relation(fields: [etfId], references: [id], onDelete: Cascade)
+
+  @@unique([etfId, holdingTicker])
+  @@index([etfId])
+  @@index([holdingTicker])
+}
+
+// ============================================================================
+// API CACHING
+// ============================================================================
+
+model ApiCache {
+  id         Int      @id @default(autoincrement())
+  key        String   @unique
+  valueJson  String   // Cached API response
+  fetchedAt  DateTime @default(now())
+  ttlSeconds Int      // Time to live in seconds
+
+  @@index([key])
+  @@index([fetchedAt])
+}

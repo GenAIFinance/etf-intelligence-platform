@@ -1,0 +1,16 @@
+[
+  {
+    "date": "2026-02-07",
+    "apiCallsUsed": 5244,
+    "etfsProcessed": 5244,
+    "succeeded": 4108,
+    "failed": 186
+  },
+  {
+    "date": "2026-02-08",
+    "apiCallsUsed": 5244,
+    "etfsProcessed": 5244,
+    "succeeded": 4992,
+    "failed": 227
+  }
+]

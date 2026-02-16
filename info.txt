@@ -1,0 +1,233 @@
+cd "C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence"
+cd apps\api
+npm run dev:api
+npm run dev:web
+
+npx tsx scripts\remove-all-duplicates.ts
+
+http://localhost:3000
+
+"I have a complete ETF Intelligence package with 18 investment detail fields implemented. The package includes:
+
+Complete database schema with expense ratio
+ETF sync service extracting all fields from EODHD API
+Beautiful dashboard UI with 4 new investment cards
+AI-powered natural language screener
+All production-ready code
+
+Files are in etf-intelligence-complete.tar.gz. I need help with [your specific question]."
+
+Checking for .env files:
+  ✓ .env
+     Resolved: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\.env
+     Lines: 15
+       - EODHD_API_KEY: SET
+       - DATABASE_URL: SET
+       - LLM_BASE_URL: SET
+       - LLM_API_KEY: SET
+       - LLM_MODEL: SET
+       - RISK_FREE_RATE_ANNUAL: SET
+       - BENCHMARK_TICKER: SET
+       - API_PORT: SET
+       - WEB_PORT: SET
+       - CACHE_TTL_ETF_PROFILE: SET
+       - CACHE_TTL_HOLDINGS: SET
+       - CACHE_TTL_PRICES: SET
+       - CACHE_TTL_METRICS: SET
+       - CACHE_TTL_NEWS: SET
+       - EODHD_REQUESTS_PER_MINUTE: SET
+
+  ✓ apps/api/.env
+     Resolved: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\api\.env
+     Lines: 15
+       - EODHD_API_KEY: SET
+       - DATABASE_URL: SET
+       - LLM_BASE_URL: SET
+       - LLM_API_KEY: SET
+       - LLM_MODEL: SET
+       - RISK_FREE_RATE_ANNUAL: SET
+       - BENCHMARK_TICKER: SET
+       - API_PORT: SET
+       - WEB_PORT: SET
+       - CACHE_TTL_ETF_PROFILE: SET
+       - CACHE_TTL_HOLDINGS: SET
+       - CACHE_TTL_PRICES: SET
+       - CACHE_TTL_METRICS: SET
+       - CACHE_TTL_NEWS: SET
+       - EODHD_REQUESTS_PER_MINUTE: SET
+
+  ✓ C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\.env
+     Resolved: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\.env
+     Lines: 15
+       - EODHD_API_KEY: SET
+       - DATABASE_URL: SET
+       - LLM_BASE_URL: SET
+       - LLM_API_KEY: SET
+       - LLM_MODEL: SET
+       - RISK_FREE_RATE_ANNUAL: SET
+       - BENCHMARK_TICKER: SET
+       - API_PORT: SET
+       - WEB_PORT: SET
+       - CACHE_TTL_ETF_PROFILE: SET
+       - CACHE_TTL_HOLDINGS: SET
+       - CACHE_TTL_PRICES: SET
+       - CACHE_TTL_METRICS: SET
+       - CACHE_TTL_NEWS: SET
+       - EODHD_REQUESTS_PER_MINUTE: SET
+
+  ✓ C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\api\.env
+     Resolved: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\api\.env
+     Lines: 15
+       - EODHD_API_KEY: SET
+       - DATABASE_URL: SET
+       - LLM_BASE_URL: SET
+       - LLM_API_KEY: SET
+       - LLM_MODEL: SET
+       - RISK_FREE_RATE_ANNUAL: SET
+       - BENCHMARK_TICKER: SET
+       - API_PORT: SET
+       - WEB_PORT: SET
+       - CACHE_TTL_ETF_PROFILE: SET
+       - CACHE_TTL_HOLDINGS: SET
+       - CACHE_TTL_PRICES: SET
+       - CACHE_TTL_METRICS: SET
+       - CACHE_TTL_NEWS: SET
+       - EODHD_REQUESTS_PER_MINUTE: SET
+
+  ✗ C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\api\scripts\.env
+     Resolved: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\api\scripts\.env
+
+  ✓ C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\api\.env
+     Resolved: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\api\.env
+     Lines: 15
+       - EODHD_API_KEY: SET
+       - DATABASE_URL: SET
+       - LLM_BASE_URL: SET
+       - LLM_API_KEY: SET
+       - LLM_MODEL: SET
+       - RISK_FREE_RATE_ANNUAL: SET
+       - BENCHMARK_TICKER: SET
+       - API_PORT: SET
+       - WEB_PORT: SET
+       - CACHE_TTL_ETF_PROFILE: SET
+       - CACHE_TTL_HOLDINGS: SET
+       - CACHE_TTL_PRICES: SET
+       - CACHE_TTL_METRICS: SET
+       - CACHE_TTL_NEWS: SET
+       - EODHD_REQUESTS_PER_MINUTE: SET
+
+  ✗ C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\.env
+     Resolved: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\.env
+
+  ✓ C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\.env
+     Resolved: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\.env
+     Lines: 15
+       - EODHD_API_KEY: SET
+       - DATABASE_URL: SET
+       - LLM_BASE_URL: SET
+       - LLM_API_KEY: SET
+       - LLM_MODEL: SET
+       - RISK_FREE_RATE_ANNUAL: SET
+       - BENCHMARK_TICKER: SET
+       - API_PORT: SET
+       - WEB_PORT: SET
+       - CACHE_TTL_ETF_PROFILE: SET
+       - CACHE_TTL_HOLDINGS: SET
+       - CACHE_TTL_PRICES: SET
+       - CACHE_TTL_METRICS: SET
+       - CACHE_TTL_NEWS: SET
+       - EODHD_REQUESTS_PER_MINUTE: SET
+
+Attempting to load .env files:
+
+Testing: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\.env
+  ✓ File exists
+  ✓ Loaded successfully
+  EODHD_API_KEY: 6982994b58...
+
+Testing: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\api\.env
+  ✓ File exists
+  ✓ Loaded successfully
+  EODHD_API_KEY: 6982994b58...
+
+Testing: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\.env
+  ✗ File does not exist
+
+Final Environment Variables:
+  EODHD_API_KEY: 6982994b58...
+  DATABASE_URL: file:./dev.db
+  API_PORT: 3001
+
+Script Location Info:
+  __dirname: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\api\scripts
+  __filename: C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\api\scripts\diagnose-env.ts
+
+Reading C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence\apps\api\.env directly:
+Raw content:
+---START---
+# EODHD API (Required)
+# Get your API key at: https://eodhd.com/register
+EODHD_API_KEY=6982994b580.....
+
+# Database
+DATABASE_URL="file:./dev.db"
+
+# LLM Configuration (Optional - app works without it)
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=your_llm_api_key_here
+LLM_MODEL=gpt-4o-mini
+
+# Risk Metrics Configuration
+RISK_FREE_RATE_ANNUAL=0.03
+BENCHMARK_TICKER=SPY
+
+# Server Configuration
+API_PORT=3001
+WEB_PORT=3000
+
+# Cache TTLs (in seconds)
+CACHE_TTL_ETF_PROFILE=604800
+CACHE_TTL_HOLDINGS=604800
+CACHE_TTL_PRICES=86400
+CACHE_TTL_METRICS=86400
+CACHE_TTL_NEWS=3600
+
+# Rate Limiting
+EODHD_REQUESTS_PER_MINUTE=300
+
+---END---
+
+Parsed content:
+  Line 1: "# EODHD API (Required)"
+  Line 2: "# Get your API key at: https://eodhd.com/register"
+  Line 3: "EODHD_API_KEY=6982994......"
+    Key: "EODHD_API_KEY"
+    Value: "6982994b....."
+    Value length: 23
+  Line 4: ""
+  Line 5: "# Database"
+  Line 6: "DATABASE_URL="file:./dev.db""
+  Line 7: ""
+  Line 8: "# LLM Configuration (Optional - app works without it)"
+  Line 9: "LLM_BASE_URL=https://api.openai.com/v1"
+  Line 10: "LLM_API_KEY=your_llm_api_key_here"
+  Line 11: "LLM_MODEL=gpt-4o-mini"
+  Line 12: ""
+  Line 13: "# Risk Metrics Configuration"
+  Line 14: "RISK_FREE_RATE_ANNUAL=0.03"
+  Line 15: "BENCHMARK_TICKER=SPY"
+  Line 16: ""
+  Line 17: "# Server Configuration"
+  Line 18: "API_PORT=3001"
+  Line 19: "WEB_PORT=3000"
+  Line 20: ""
+  Line 21: "# Cache TTLs (in seconds)"
+  Line 22: "CACHE_TTL_ETF_PROFILE=604800"
+  Line 23: "CACHE_TTL_HOLDINGS=604800"
+  Line 24: "CACHE_TTL_PRICES=86400"
+  Line 25: "CACHE_TTL_METRICS=86400"
+  Line 26: "CACHE_TTL_NEWS=3600"
+  Line 27: ""
+  Line 28: "# Rate Limiting"
+  Line 29: "EODHD_REQUESTS_PER_MINUTE=300"
+  Line 30: ""
