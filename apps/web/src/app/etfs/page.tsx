@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Search, Filter, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
@@ -8,6 +8,7 @@ import { useEtfList } from '@/lib/hooks';
 import { formatCurrency, formatPercent } from '@/lib/utils';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 
+// Force dynamic rendering - prevents static generation at build time
 export const dynamic = 'force-dynamic';
 
 const ASSET_CLASSES = ['All', 'Equity', 'Fixed Income', 'Commodity', 'Multi-Asset', 'Real Estate'];
@@ -21,7 +22,8 @@ const AUM_RANGES = [
   { label: 'Micro (<$100M)', value: 'micro', min: 0, max: 100_000_000 },
 ];
 
-export default function EtfsPage() {
+// Main content component that uses useSearchParams
+function ETFsPageContent() {
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [assetClass, setAssetClass] = useState(searchParams.get('assetClass') || 'All');
@@ -92,6 +94,7 @@ export default function EtfsPage() {
     if (page !== 1) {
       setPage(1);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, assetClass, strategyType, aumFilter]);
 
   const handlePageChange = useCallback((newPage: number) => {
@@ -329,7 +332,7 @@ export default function EtfsPage() {
               </table>
             </div>
 
-            {/* FIXED Pagination */}
+            {/* Pagination */}
             {(data?.totalPages || 1) > 1 && (
               <div className="flex flex-col sm:flex-row items-center justify-between mt-4 pt-4 border-t gap-4">
                 <div className="text-sm text-gray-500">
@@ -387,5 +390,27 @@ export default function EtfsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Main export with Suspense boundary
+export default function ETFsPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-6">
+          <div className="h-8 bg-gray-200 rounded w-48 mb-2 animate-pulse"></div>
+          <div className="h-4 bg-gray-200 rounded w-64 animate-pulse"></div>
+        </div>
+        <div className="card mb-6">
+          <div className="h-64 bg-gray-100 rounded animate-pulse"></div>
+        </div>
+        <div className="card">
+          <div className="h-96 bg-gray-100 rounded animate-pulse"></div>
+        </div>
+      </div>
+    }>
+      <ETFsPageContent />
+    </Suspense>
   );
 }
