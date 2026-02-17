@@ -1,11 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-   images: {
+  output: 'standalone',
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '2mb',
+    },
+  },
+  // Disable static page generation to prevent build-time API calls
+  staticPageGenerationTimeout: 1000,
+  images: {
     unoptimized: true,
   },
-  transpilePackages: ['@etf-intelligence/shared'],
-  
-};
+}
 
-module.exports = nextConfig;
+module.exports = nextConfig
