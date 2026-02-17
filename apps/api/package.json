@@ -16,7 +16,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@etf-intelligence/shared": "*",
     "@fastify/cors": "^8.5.0",
     "@fastify/rate-limit": "^9.1.0",
     "@prisma/client": "^5.7.1",
