@@ -8,6 +8,10 @@ import { useEtfList } from '@/lib/hooks';
 import { formatCurrency, formatPercent } from '@/lib/utils';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 
+export const dynamic = 'force-dynamic';
+
+export const dynamic = 'force-dynamic';
+
 const ASSET_CLASSES = ['All', 'Equity', 'Fixed Income', 'Commodity', 'Multi-Asset', 'Real Estate'];
 const STRATEGY_TYPES = ['All', 'Passive Index', 'Active', 'Sector', 'Factor/Smart Beta', 'Thematic'];
 const AUM_RANGES = [

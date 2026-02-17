@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { Search, TrendingUp, DollarSign, BarChart3, Sparkles, PieChart, AlertCircle, Info } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface RankingItem {
   rank: number;
   ticker: string;
