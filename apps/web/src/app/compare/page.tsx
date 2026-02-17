@@ -7,6 +7,8 @@ import { useState } from 'react';
 import { Search, X, ArrowRight, TrendingUp, DollarSign, BarChart3, Sparkles, Download, CheckCircle2, AlertCircle, Info } from 'lucide-react';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 interface ComparisonETF {
   ticker: string;
   name: string;

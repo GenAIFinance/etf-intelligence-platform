@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 
 // Mark this route as dynamic to avoid static generation errors
 export const dynamic = 'force-dynamic';
+
 import Link from 'next/link';
 import {
   ChevronLeft,

@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { Search, Sparkles, TrendingUp, Loader2 } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 type ScreenResult = {
   ticker: string;
   name: string;
