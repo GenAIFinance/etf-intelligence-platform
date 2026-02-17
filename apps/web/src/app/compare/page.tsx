@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { Search, X, ArrowRight, TrendingUp, DollarSign, BarChart3, Sparkles, Download, CheckCircle2, AlertCircle, Info } from 'lucide-react';
 import Link from 'next/link';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,7 +85,7 @@ export default function ComparePage() {
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:3001/api/etf/compare', {
+      const response = await fetch(`${API_URL}/api/etf/compare`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tickers: validTickers }),
@@ -116,7 +117,7 @@ export default function ComparePage() {
         setIsLoading(true);
         setError(null);
         try {
-          const response = await fetch('http://localhost:3001/api/etf/compare', {
+          const response = await fetch(`${API_URL}/api/etf/compare`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tickers: validTickers }),

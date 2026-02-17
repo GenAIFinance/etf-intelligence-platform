@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Search, Sparkles, TrendingUp, Loader2 } from 'lucide-react';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,7 +77,7 @@ export default function AIScreenerPage() {
     setSearchedQuery(searchQuery);
 
     try {
-      const response = await fetch('http://localhost:3001/api/ai-screener', {
+      const response = await fetch(`${API_URL}/api/ai-screener`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: searchQuery, limit: 20 }),

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { Search, TrendingUp, DollarSign, BarChart3, Sparkles, PieChart, AlertCircle, Info } from 'lucide-react';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,7 +59,7 @@ export default function Dashboard() {
   async function fetchRankings() {
     setIsLoadingRankings(true);
     try {
-      const response = await fetch('http://localhost:3001/api/rankings/top10');
+      const response = await fetch(`${API_URL}/api/rankings/top10`);
       if (response.ok) {
         const data = await response.json();
         setRankings(data);
@@ -73,7 +74,7 @@ export default function Dashboard() {
   async function searchETFs(query: string) {
     setIsSearching(true);
     try {
-      const response = await fetch(`http://localhost:3001/api/etf/search?q=${encodeURIComponent(query)}&limit=5`);
+      const response = await fetch(`${API_URL}/api/etf/search?q=${encodeURIComponent(query)}&limit=5`);
       if (response.ok) {
         const data = await response.json();
         setSearchResults(data.etfs || data.results || []);
