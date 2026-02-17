@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /
+
+# Block all crawlers - private platform, personal use only

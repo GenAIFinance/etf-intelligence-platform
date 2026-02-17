@@ -113,6 +113,12 @@ export default function RootLayout({
 
   return (
     <html lang="en">
+      <head>
+        {/* Block all search engine indexing - EODHD personal use compliance */}
+        <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noodp" />
+        <meta name="googlebot" content="noindex, nofollow" />
+        <meta name="bingbot" content="noindex, nofollow" />
+      </head>
       <body className={`${inter.className} min-h-screen flex flex-col`}>
         <QueryClientProvider client={queryClient}>
           <Navigation />
