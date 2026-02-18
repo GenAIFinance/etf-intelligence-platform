@@ -1,0 +1,161 @@
+name: Daily ETF Data Sync
+
+on:
+  # Run every day at 6 PM EST (23:00 UTC)
+  schedule:
+    - cron: '0 23 * * *'
+  
+  # Allow manual trigger from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual run'
+        required: false
+        default: 'Manual sync'
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  sync:
+    name: Sync ETF Data
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hour timeout (sync takes 4-5 hours)
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Node.js ─────────────────────────────────────────────
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: apps/api/package-lock.json
+
+      # ── 3. Install dependencies ───────────────────────────────────────
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm ci
+
+      # ── 4. Generate Prisma client ─────────────────────────────────────
+      - name: Generate Prisma client
+        working-directory: apps/api
+        run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      # ── 5. Check API usage before sync ───────────────────────────────
+      - name: Check EODHD API usage
+        working-directory: apps/api
+        run: |
+          echo "🔍 Checking EODHD API usage before sync..."
+          USAGE=$(curl -s "https://eodhd.com/api/user?api_token=${{ secrets.EODHD_API_TOKEN }}&fmt=json" | \
+            node -e "
+              let data = '';
+              process.stdin.on('data', d => data += d);
+              process.stdin.on('end', () => {
+                try {
+                  const json = JSON.parse(data);
+                  const used = json.apiRequests || 0;
+                  const limit = json.dailyRateLimit || 100000;
+                  const pct = ((used / limit) * 100).toFixed(1);
+                  console.log('Used: ' + used + ' / ' + limit + ' (' + pct + '%)');
+                  if (used / limit > 0.85) {
+                    console.log('⚠️  WARNING: API usage over 85% — skipping sync today');
+                    process.exit(1);
+                  }
+                  console.log('✅ API usage OK, proceeding with sync');
+                } catch(e) {
+                  console.log('Could not parse usage data, proceeding anyway');
+                }
+              });
+            ")
+          echo "$USAGE"
+        env:
+          EODHD_API_TOKEN: ${{ secrets.EODHD_API_TOKEN }}
+        continue-on-error: false
+
+      # ── 6. Run the complete sync ──────────────────────────────────────
+      - name: Run ETF sync
+        working-directory: apps/api
+        run: |
+          echo "🚀 Starting daily ETF sync at $(date)"
+          echo "Triggered by: ${{ github.event.inputs.reason || 'Scheduled daily run' }}"
+          npx tsx scripts/load-etfs-daily.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EODHD_API_TOKEN: ${{ secrets.EODHD_API_TOKEN }}
+          EODHD_API_KEY: ${{ secrets.EODHD_API_TOKEN }}  # script uses EODHD_API_KEY
+          NODE_ENV: production
+
+      # ── 7. Post-sync verification ─────────────────────────────────────
+      - name: Verify sync results
+        working-directory: apps/api
+        run: |
+          echo "🔍 Verifying database after sync..."
+          node -e "
+            const { PrismaClient } = require('@prisma/client');
+            const prisma = new PrismaClient();
+            async function check() {
+              const etfCount = await prisma.etf.count();
+              console.log('📈 Total ETFs: ' + etfCount);
+              await prisma.\$disconnect();
+              if (etfCount < 4000) {
+                console.log('⚠️  ETF count seems low');
+                process.exit(1);
+              }
+              console.log('✅ Sync verification passed');
+            }
+            check().catch(e => { console.error(e); process.exit(1); });
+          "
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      # ── 8. Notify on success ─────────────────────────────────────────
+      - name: Report sync success
+        if: success()
+        run: |
+          echo "✅ Daily ETF sync completed successfully at $(date)"
+          echo "Check the database at your Supabase dashboard."
+
+  # ── Failure notification ──────────────────────────────────────────────
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: sync
+    if: failure()
+    steps:
+      - name: Log failure details
+        run: |
+          echo "❌ Daily ETF sync FAILED at $(date)"
+          echo "Check GitHub Actions logs for details:"
+          echo "https://github.com/${{ github.repository }}/actions"
+          echo ""
+          echo "Common causes:"
+          echo "  - EODHD API limit exceeded"
+          echo "  - Database connection issue"
+          echo "  - Script error"
+
+      # Optional: send email via Gmail SMTP
+      # Uncomment and add secrets if you want email alerts
+      # - name: Send failure email
+      #   uses: dawidd6/action-send-mail@v3
+      #   with:
+      #     server_address: smtp.gmail.com
+      #     server_port: 587
+      #     username: ${{ secrets.EMAIL_USERNAME }}
+      #     password: ${{ secrets.EMAIL_PASSWORD }}
+      #     subject: "⚠️ ETF Sync Failed - ${{ github.repository }}"
+      #     body: |
+      #       The daily ETF sync failed at $(date).
+      #       
+      #       Check logs: https://github.com/${{ github.repository }}/actions
+      #       
+      #       Common fixes:
+      #       - Check EODHD API limit at https://eodhd.com/cp/dashboard
+      #       - Check Supabase status at https://status.supabase.com
+      #     to: your-email@gmail.com
+      #     from: ETF Intelligence Platform

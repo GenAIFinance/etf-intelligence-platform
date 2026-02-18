@@ -1,3 +1,5 @@
+VERCEL Webpage login password: ETFintel2026!
+
 cd "C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence"
 cd apps\api
 npm run dev:api
