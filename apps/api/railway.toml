@@ -1,12 +1,4 @@
-[build]
-builder = "nixpacks"
-
-[build.env]
-NPM_CONFIG_PREFIX = "/home/nixpacks/.npm-global"
-
 [deploy]
 startCommand = "node dist/index.js"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
