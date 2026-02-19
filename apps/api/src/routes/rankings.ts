@@ -27,7 +27,7 @@ export async function rankingsRoutes(app: FastifyInstance) {
       
       return reply.send(rankings);
     } catch (error: any) {
-      app.log.error('Rankings error:', error);
+      console.error('Rankings error:', error);
       return reply.status(500).send({ 
         error: 'Failed to fetch rankings', 
         message: error.message 

@@ -29,7 +29,7 @@ export async function etfComparisonRoutes(app: FastifyInstance) {
       const result = await etfComparisonService.compareETFs(tickers);
       return reply.send(result);
     } catch (error: any) {
-      app.log.error('ETF comparison error:', error);
+      console.error('ETF comparison error:', error);
       return reply.status(500).send({ 
         error: 'Comparison failed', 
         message: error.message 
@@ -69,7 +69,7 @@ export async function etfComparisonRoutes(app: FastifyInstance) {
       
       return reply.send(result);
     } catch (error: any) {
-      app.log.error('Expense impact calculation error:', error);
+      console.error('Expense impact calculation error:', error);
       return reply.status(500).send({ 
         error: 'Calculation failed', 
         message: error.message 
