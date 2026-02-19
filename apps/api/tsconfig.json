@@ -2,12 +2,12 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": [
-      "ES2020"
-    ],
+    "lib": ["ES2020"],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": false,
+    "strictNullChecks": false,
+    "noImplicitAny": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -19,10 +19,18 @@
     "moduleResolution": "node"
   },
   "include": [
-    "src/**/*"
+    "src/index.ts",
+    "src/db.ts",
+    "src/config.ts",
+    "src/llm.ts",
+    "src/routes/**/*",
+    "src/services/etf-comparison.ts",
+    "src/services/rankings.ts",
+    "src/services/cache.ts",
+    "src/services/eodhd.ts",
+    "src/services/etf.ts",
+    "src/services/metrics.ts",
+    "src/services/ai-screener.ts"
   ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ]
+  "exclude": ["node_modules", "dist"]
 }
