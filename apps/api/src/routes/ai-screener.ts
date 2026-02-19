@@ -245,20 +245,26 @@ async function handleStockExposure(stockTerm: string, originalQuery: string, lim
     .sort((a, b) => b.weight - a.weight)
     .slice(0, limit);
 
-  const results = unique.map(h => ({
-    ticker:          h.etf.ticker,
-    name:            h.etf.name,
-    assetClass:      h.etf.assetClass,
-    strategyType:    h.etf.strategyType,
-    aum:             h.etf.aum,
-    netExpenseRatio: h.etf.netExpenseRatio,
-    holdingTicker:   h.holdingTicker,
-    holdingName:     h.holdingName,
-    weight:          Math.round(h.weight * 100) / 100,
-    asOfDate:        h.asOfDate,
-    relevanceScore:  Math.round(Math.min(h.weight / 10, 1) * 10) / 10,
-    matchReason:     `${h.holdingName} = ${h.weight.toFixed(2)}% of portfolio`,
-  }));
+  // Weight stored as raw % value (e.g. 5.23 = 5.23%) by COMPLETE-ETF-SYNC
+  // NOT as decimal 0.0523 — display and score accordingly
+  const results = unique.map(h => {
+    const w = Math.round(h.weight * 100) / 100;
+    return {
+      ticker:          h.etf.ticker,
+      name:            h.etf.name,
+      assetClass:      h.etf.assetClass,
+      strategyType:    h.etf.strategyType,
+      aum:             h.etf.aum,
+      netExpenseRatio: h.etf.netExpenseRatio,
+      holdingTicker:   h.holdingTicker,
+      holdingName:     h.holdingName,
+      weight:          w,
+      asOfDate:        h.asOfDate,
+      // 10%+ weight = max score 1.0; scale linearly below that
+      relevanceScore:  Math.round(Math.min(w / 10, 1) * 10) / 10,
+      matchReason:     `${h.holdingName} = ${w.toFixed(2)}% of portfolio`,
+    };
+  });
 
   const avgWeight = results.reduce((s, r) => s + r.weight, 0) / results.length;
 

@@ -19,11 +19,12 @@ export async function etfRoutes(fastify: FastifyInstance) {
 
       const where: any = {};
 
-      // Search by ticker or name
+      // Search by ticker or name — case-insensitive
       if (search) {
         where.OR = [
-          { ticker: { contains: search.toUpperCase() } },
-          { name: { contains: search } },
+          { ticker: { contains: search, mode: 'insensitive' } },
+          { name: { contains: search, mode: 'insensitive' } },
+          { strategyType: { contains: search, mode: 'insensitive' } },
         ];
       }
 
@@ -188,86 +189,133 @@ export async function etfRoutes(fastify: FastifyInstance) {
   });
 
   // GET /api/etfs/:ticker/themes-exposure - Get theme exposures
+  // Uses direct holding keyword matching (HoldingClassification table not required)
   fastify.get('/etfs/:ticker/themes-exposure', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { ticker } = request.params as { ticker: string };
 
-      const etf = await prisma.etf.findUnique({ 
-        where: { ticker: ticker.toUpperCase() } 
+      const etf = await prisma.etf.findUnique({
+        where: { ticker: ticker.toUpperCase() }
       });
-      
+
       if (!etf) {
         return reply.status(404).send({ error: 'ETF not found' });
       }
 
-      const classifications = await prisma.holdingClassification.findMany({
+      // Get all holdings for this ETF
+      const holdings = await prisma.etfHolding.findMany({
         where: { etfId: etf.id },
+        orderBy: { weight: 'desc' },
       });
 
-      const latestDate = await prisma.etfHolding.findFirst({
-        where: { etfId: etf.id },
-        orderBy: { asOfDate: 'desc' },
-        select: { asOfDate: true },
-      });
+      if (holdings.length === 0) {
+        return { ticker, exposures: [], count: 0 };
+      }
 
-      const holdings = latestDate ? await prisma.etfHolding.findMany({
-        where: { 
-          etfId: etf.id,
-          asOfDate: latestDate.asOfDate,
+      // Theme definitions: each has a list of company name keywords
+      // Match against holdingName (case-insensitive)
+      const THEME_DEFINITIONS = [
+        {
+          id: 'ai', name: 'Artificial Intelligence',
+          keywords: ['nvidia', 'microsoft', 'alphabet', 'google', 'meta', 'amazon', 'palantir',
+            'c3.ai', 'uipath', 'salesforce', 'servicenow', 'datadog', 'snowflake'],
         },
-      }) : [];
-
-      const themeMap = new Map();
-      const THEMES = [
-        { id: 'ai', name: 'Artificial Intelligence' },
-        { id: 'cloud', name: 'Cloud Computing' },
-        { id: 'ev', name: 'Electric Vehicles' },
-        { id: 'fintech', name: 'Financial Technology' },
-        { id: 'healthcare', name: 'Healthcare Innovation' },
-        { id: 'cybersecurity', name: 'Cybersecurity' },
-        { id: 'ecommerce', name: 'E-Commerce' },
-        { id: 'renewable', name: 'Renewable Energy' },
-        { id: 'semiconductors', name: 'Semiconductors' },
-        { id: 'biotech', name: 'Biotechnology' },
+        {
+          id: 'semiconductors', name: 'Semiconductors',
+          keywords: ['nvidia', 'amd', 'intel', 'tsmc', 'taiwan semiconductor', 'qualcomm',
+            'broadcom', 'asml', 'micron', 'applied materials', 'lam research', 'kla',
+            'marvell', 'analog devices', 'texas instruments', 'on semiconductor'],
+        },
+        {
+          id: 'cloud', name: 'Cloud Computing',
+          keywords: ['amazon', 'microsoft', 'alphabet', 'google', 'salesforce', 'snowflake',
+            'datadog', 'twilio', 'servicenow', 'workday', 'veeva', 'cloudflare', 'fastly'],
+        },
+        {
+          id: 'cybersecurity', name: 'Cybersecurity',
+          keywords: ['crowdstrike', 'palo alto', 'fortinet', 'zscaler', 'sentinelone',
+            'okta', 'cloudflare', 'rapid7', 'qualys', 'tenable', 'cyberark'],
+        },
+        {
+          id: 'ev', name: 'Electric Vehicles',
+          keywords: ['tesla', 'rivian', 'lucid', 'nio', 'byd', 'albemarle', 'chargepoint',
+            'li-cycle', 'lithium', 'livent', 'plug power', 'ballard'],
+        },
+        {
+          id: 'fintech', name: 'Financial Technology',
+          keywords: ['visa', 'mastercard', 'paypal', 'square', 'block', 'adyen', 'stripe',
+            'coinbase', 'robinhood', 'affirm', 'sofi', 'marqeta', 'fiserv', 'flywire'],
+        },
+        {
+          id: 'biotech', name: 'Biotechnology',
+          keywords: ['moderna', 'biontech', 'regeneron', 'vertex', 'gilead', 'biogen',
+            'amgen', 'illumina', 'crispr', 'beam therapeutics', 'pacific biosciences'],
+        },
+        {
+          id: 'healthcare', name: 'Healthcare Innovation',
+          keywords: ['intuitive surgical', 'dexcom', 'teladoc', 'veeva', 'masimo',
+            'hologic', 'align technology', 'insulet', 'penumbra', 'invacare'],
+        },
+        {
+          id: 'renewable', name: 'Renewable Energy',
+          keywords: ['nextera', 'enphase', 'solaredge', 'first solar', 'vestas', 'orsted',
+            'sunrun', 'sunnova', 'brookfield renewable', 'terraform', 'plug power'],
+        },
+        {
+          id: 'ecommerce', name: 'E-Commerce',
+          keywords: ['amazon', 'shopify', 'etsy', 'wayfair', 'chewy', 'poshmark',
+            'mercadolibre', 'sea limited', 'pinduoduo', 'jd.com', 'alibaba'],
+        },
       ];
 
-      for (const theme of THEMES) {
-        themeMap.set(theme.id, { 
-          themeId: theme.id,
+      const themeMap = new Map<string, {
+        themeId: string; themeName: string;
+        exposure: number; holdings: any[];
+      }>();
+
+      for (const theme of THEME_DEFINITIONS) {
+        themeMap.set(theme.id, {
+          themeId:   theme.id,
           themeName: theme.name,
-          exposure: 0, 
-          holdings: [] 
+          exposure:  0,
+          holdings:  [],
         });
       }
 
-      for (const classification of classifications) {
-        const themes = JSON.parse(classification.themesJson || '[]');
-        const holding = holdings.find(h => h.holdingTicker === classification.holdingTicker);
-        const weight = holding?.weight || 0;
+      // Match each holding against themes
+      for (const holding of holdings) {
+        const nameLower = (holding.holdingName || holding.holdingTicker || '').toLowerCase();
+        const tickLower = (holding.holdingTicker || '').toLowerCase();
 
-        for (const { themeId, confidence } of themes) {
-          const themeData = themeMap.get(themeId);
-          if (themeData) {
-            themeData.exposure += weight * confidence;
-            themeData.holdings.push({
-              ticker: classification.holdingTicker,
-              name: classification.holdingName,
-              weight,
-              confidence,
+        for (const theme of THEME_DEFINITIONS) {
+          const matched = theme.keywords.some(kw =>
+            nameLower.includes(kw) || tickLower.includes(kw)
+          );
+          if (matched) {
+            const td = themeMap.get(theme.id)!;
+            td.exposure += holding.weight;
+            td.holdings.push({
+              ticker: holding.holdingTicker,
+              name:   holding.holdingName,
+              weight: holding.weight,
             });
           }
         }
       }
 
       const exposures = Array.from(themeMap.values())
-        .filter(theme => theme.exposure > 0)
+        .filter(t => t.exposure > 0)
         .sort((a, b) => b.exposure - a.exposure)
-        .map(theme => ({
-          ...theme,
-          holdings: theme.holdings.sort((a, b) => b.weight - a.weight).slice(0, 10),
+        .map(t => ({
+          ...t,
+          exposure: Math.round(t.exposure * 100) / 100,
+          holdings: t.holdings
+            .sort((a, b) => b.weight - a.weight)
+            .slice(0, 10),
         }));
 
       return { ticker, exposures, count: exposures.length };
+
     } catch (error: any) {
       fastify.log.error('Themes error:', error);
       reply.status(500).send({ error: error.message });
