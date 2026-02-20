@@ -663,7 +663,7 @@ function ThemesTab({ ticker, themes }: any) {
               >
                 <div className="flex justify-between items-center">
                   <span className="font-medium text-gray-900">{t.themeName}</span>
-                  <span className="badge badge-blue">{formatPercent(t.exposure)}</span>
+                  <span className="badge badge-blue">{t.exposure.toFixed(2)}%</span>
                 </div>
                 <div className="text-sm text-gray-500 mt-1">
                   {t.holdings?.length || 0} holdings
@@ -697,7 +697,7 @@ function ThemesTab({ ticker, themes }: any) {
                   <tr key={h.ticker}>
                     <td className="font-medium">{h.ticker}</td>
                     <td>{h.name}</td>
-                    <td className="text-right font-mono">{formatPercent(h.weight)}</td>
+                    <td className="text-right font-mono">{h.weight.toFixed(2)}%</td>
                     <td className="text-right font-mono">
                       {formatPercent(h.confidence)}
                     </td>
