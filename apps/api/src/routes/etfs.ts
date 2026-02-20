@@ -213,10 +213,18 @@ export async function etfRoutes(fastify: FastifyInstance) {
         return { ticker, exposures: [], count: 0 };
       }
 
-      const holdings = await prisma.etfHolding.findMany({
+      const rawHoldings = await prisma.etfHolding.findMany({
         where: { etfId: etf.id, asOfDate: latestDate.asOfDate },
         orderBy: { weight: 'desc' },
       });
+
+      // Deduplicate by holdingTicker - keep highest weight entry
+      const seenTickers = new Map<string, typeof rawHoldings[0]>();
+      for (const h of rawHoldings) {
+        const key = h.holdingTicker.toUpperCase();
+        if (!seenTickers.has(key)) seenTickers.set(key, h);
+      }
+      const holdings = Array.from(seenTickers.values());
 
       if (holdings.length === 0) {
         return { ticker, exposures: [], count: 0 };
