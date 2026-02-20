@@ -3,7 +3,7 @@ import prisma from '../db';
 
 export async function etfRoutes(fastify: FastifyInstance) {
   
-  // GET /api/etfs - List/search ETFs (THIS IS THE MISSING ROUTE!)
+  // GET /api/etfs - List/search ETFs
   fastify.get('/etfs', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const query = request.query as any;
@@ -230,6 +230,13 @@ export async function etfRoutes(fastify: FastifyInstance) {
         return { ticker, exposures: [], count: 0 };
       }
 
+      // Compute total portfolio weight for normalization
+      // weights are stored as percentages (e.g. 8.96 = 8.96%)
+      const totalPortfolioWeight = holdings.reduce((sum, h) => sum + (h.weight || 0), 0);
+      // Guard against un-normalized data: if sum >> 100, weights may be in basis points or duplicated
+      // We'll normalize theme exposure as a share of total portfolio weight, capped at 100%
+      const weightDivisor = totalPortfolioWeight > 150 ? totalPortfolioWeight : 100;
+
       // Theme definitions: each has a list of company name keywords
       // Match against holdingName (case-insensitive)
       const THEME_DEFINITIONS = [
@@ -288,15 +295,15 @@ export async function etfRoutes(fastify: FastifyInstance) {
 
       const themeMap = new Map<string, {
         themeId: string; themeName: string;
-        exposure: number; holdings: any[];
+        rawExposure: number; holdings: any[];
       }>();
 
       for (const theme of THEME_DEFINITIONS) {
         themeMap.set(theme.id, {
-          themeId:   theme.id,
-          themeName: theme.name,
-          exposure:  0,
-          holdings:  [],
+          themeId:     theme.id,
+          themeName:   theme.name,
+          rawExposure: 0,
+          holdings:    [],
         });
       }
 
@@ -311,26 +318,37 @@ export async function etfRoutes(fastify: FastifyInstance) {
           );
           if (matched) {
             const td = themeMap.get(theme.id)!;
-            td.exposure += holding.weight;
+            td.rawExposure += holding.weight || 0;
             td.holdings.push({
               ticker: holding.holdingTicker,
               name:   holding.holdingName,
-              weight: holding.weight,
+              weight: Math.round((holding.weight || 0) * 100) / 100, // already in %, round to 2dp
             });
           }
         }
       }
 
       const exposures = Array.from(themeMap.values())
-        .filter(t => t.exposure > 0)
-        .sort((a, b) => b.exposure - a.exposure)
-        .map(t => ({
-          ...t,
-          exposure: Math.round(t.exposure * 100) / 100,
-          holdings: t.holdings
-            .sort((a, b) => b.weight - a.weight)
-            .slice(0, 10),
-        }));
+        .filter(t => t.rawExposure > 0)
+        .sort((a, b) => b.rawExposure - a.rawExposure)
+        .map(t => {
+          // Normalize: express theme exposure as % of total portfolio weight
+          // If weights are well-behaved (sum ~100), this equals the raw sum.
+          // If weights are inflated (sum >> 100), this normalizes correctly.
+          const normalizedExposure = Math.min(
+            Math.round((t.rawExposure / weightDivisor) * 10000) / 100, // two decimal places
+            100 // hard cap at 100%
+          );
+
+          return {
+            themeId:  t.themeId,
+            themeName: t.themeName,
+            exposure: normalizedExposure,  // now always 0–100
+            holdings: t.holdings
+              .sort((a, b) => b.weight - a.weight)
+              .slice(0, 10),
+          };
+        });
 
       return { ticker, exposures, count: exposures.length };
 
