@@ -590,7 +590,7 @@ function HoldingsTab({ ticker, holdings }: any) {
                 <td className="max-w-xs truncate" title={h.holdingName}>
                   {h.holdingName}
                 </td>
-                <td className="text-right font-mono">{formatPercent(h.weight)}</td>
+                <td className="text-right font-mono">{h.weight != null ? `${h.weight.toFixed(2)}%` : 'N/A'}</td>
                 <td>
                   <span className="badge badge-blue text-xs">{h.sector || 'N/A'}</span>
                 </td>
@@ -636,7 +636,7 @@ function ThemesTab({ ticker, themes }: any) {
           <ThemeExposureChart
             exposures={themes.exposures.map((t: any) => ({
               themeName: t.themeName,
-              exposure: t.exposure,
+              exposure: t.exposure / 100, // convert % to decimal for chart (chart uses formatPercent internally)
             }))}
           />
         ) : (
@@ -699,7 +699,7 @@ function ThemesTab({ ticker, themes }: any) {
                     <td>{h.name}</td>
                     <td className="text-right font-mono">{h.weight.toFixed(2)}%</td>
                     <td className="text-right font-mono">
-                      {formatPercent(h.confidence)}
+                      {h.confidence != null ? formatPercent(h.confidence) : 'N/A'}
                     </td>
                   </tr>
                 ))}
