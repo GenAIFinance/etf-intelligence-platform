@@ -202,9 +202,19 @@ export async function etfRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: 'ETF not found' });
       }
 
-      // Get all holdings for this ETF
-      const holdings = await prisma.etfHolding.findMany({
+      // Get latest holdings only (filter by most recent asOfDate)
+      const latestDate = await prisma.etfHolding.findFirst({
         where: { etfId: etf.id },
+        orderBy: { asOfDate: 'desc' },
+        select: { asOfDate: true },
+      });
+
+      if (!latestDate) {
+        return { ticker, exposures: [], count: 0 };
+      }
+
+      const holdings = await prisma.etfHolding.findMany({
+        where: { etfId: etf.id, asOfDate: latestDate.asOfDate },
         orderBy: { weight: 'desc' },
       });
 
