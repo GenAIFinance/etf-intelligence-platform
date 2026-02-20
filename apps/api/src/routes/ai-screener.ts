@@ -197,7 +197,7 @@ export async function aiScreenerRoutes(fastify: FastifyInstance) {
       return await handleGeneral(query, maxResults);
 
     } catch (error: any) {
-      fastify.log.error('AI Screener error:', error);
+      console.error('AI Screener error:', error);
       return reply.status(500).send({ error: 'Failed to process query', message: error.message });
     }
   });

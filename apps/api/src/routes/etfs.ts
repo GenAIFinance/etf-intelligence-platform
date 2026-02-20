@@ -72,7 +72,7 @@ export async function etfRoutes(fastify: FastifyInstance) {
         totalPages: Math.ceil(total / Number(pageSize)),
       };
     } catch (error: any) {
-      fastify.log.error('ETF list error:', error);
+      console.error('ETF list error:', error);
       reply.status(500).send({ error: error.message });
     }
   });
@@ -99,7 +99,7 @@ export async function etfRoutes(fastify: FastifyInstance) {
 
       return reply.send({ ...etf, holdingsCount: etf._count.holdings });
     } catch (error: any) {
-      fastify.log.error('ETF detail error:', error);
+      console.error('ETF detail error:', error);
       return reply.status(500).send({ error: error.message });
     }
   });
@@ -317,7 +317,7 @@ export async function etfRoutes(fastify: FastifyInstance) {
       return { ticker, exposures, count: exposures.length };
 
     } catch (error: any) {
-      fastify.log.error('Themes error:', error);
+      console.error('Themes error:', error);
       reply.status(500).send({ error: error.message });
     }
   });
