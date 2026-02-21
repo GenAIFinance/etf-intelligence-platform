@@ -240,6 +240,10 @@ export class EtfService {
         etfData?.NetExpenseRatio
       );
 
+      // Dividend yield and beta — available directly from EODHD
+      const dividendYield = safeParseFloat(etfDataAny?.Yield);
+      const betaVsMarket = safeParseFloat((fundamentals as any)?.Technicals?.Beta);
+
       const turnover = safeParseFloat(etfData?.AnnualHoldingsTurnover);
       const aum = safeParseFloat(etfData?.TotalAssets);
       const inceptionDate = etfData?.Inception_Date 
@@ -293,6 +297,10 @@ export class EtfService {
           turnover,
           aum,
           inceptionDate,
+
+          // Performance & risk
+          dividendYield,
+          betaVsMarket,
         },
         update: {
           // Update core fields
@@ -331,6 +339,10 @@ export class EtfService {
           turnover,
           aum,
           updatedAt: new Date(),
+
+          // Update performance & risk
+          dividendYield,
+          betaVsMarket,
         },
       });
 
@@ -581,6 +593,14 @@ export class EtfService {
           etfId: etf.id,
           asOfDate,
           trailingReturnsJson: JSON.stringify(trailingReturns),
+          // Individual return fields for easy querying
+          return1M: trailingReturns['1M'],
+          return3M: trailingReturns['3M'],
+          return6M: trailingReturns['6M'],
+          return1Y: trailingReturns['1Y'],
+          return3Y: trailingReturns['3Y'],
+          return5Y: trailingReturns['5Y'],
+          returnYTD: trailingReturns['YTD'],
           volatility,
           sharpe,
           maxDrawdown,
@@ -595,6 +615,13 @@ export class EtfService {
         },
         update: {
           trailingReturnsJson: JSON.stringify(trailingReturns),
+          return1M: trailingReturns['1M'],
+          return3M: trailingReturns['3M'],
+          return6M: trailingReturns['6M'],
+          return1Y: trailingReturns['1Y'],
+          return3Y: trailingReturns['3Y'],
+          return5Y: trailingReturns['5Y'],
+          returnYTD: trailingReturns['YTD'],
           volatility,
           sharpe,
           maxDrawdown,

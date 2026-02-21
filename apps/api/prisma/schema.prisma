@@ -70,6 +70,13 @@ model Etf {
   updatedAt     DateTime           @updatedAt
 
   // ========================================================================
+  // PERFORMANCE & RISK - Added Feb 2026
+  // ========================================================================
+
+  dividendYield Float?               // Annual dividend yield % (from EODHD ETF_Data.Yield)
+  betaVsMarket  Float?               // Beta vs S&P 500 (from EODHD Technicals.Beta)
+
+  // ========================================================================
   // RELATIONSHIPS
   // ========================================================================
   
@@ -158,11 +165,24 @@ model EtfMetricSnapshot {
   id                  Int      @id @default(autoincrement())
   etfId               Int
   asOfDate            DateTime
-  trailingReturnsJson String   // JSON: { "1m": X, "3m": Y, "1y": Z, "3y": A, "5y": B }
+  trailingReturnsJson String   // JSON: { "1M": X, "3M": Y, "6M": Z, "1Y": A, "3Y": B, "5Y": C, "YTD": D }
+
+  // Individual return fields for easy querying/sorting
+  return1M    Float?   // 1-month return (decimal, e.g. 0.05 = 5%)
+  return3M    Float?   // 3-month return
+  return6M    Float?   // 6-month return
+  return1Y    Float?   // 1-year return
+  return3Y    Float?   // 3-year return
+  return5Y    Float?   // 5-year return
+  returnYTD   Float?   // Year-to-date return
+
+  // Risk metrics
   volatility          Float?   // Annualized standard deviation
-  sharpe              Float?   // Sharpe ratio
-  maxDrawdown         Float?   // Maximum drawdown %
-  beta                Float?   // Beta vs benchmark
+  sharpe              Float?   // Sharpe ratio (1Y)
+  maxDrawdown         Float?   // Maximum drawdown % (decimal)
+  beta                Float?   // Beta vs benchmark (calculated from prices)
+
+  // Technical indicators
   rsi14               Float?   // 14-day RSI
   ma20                Float?   // 20-day moving average
   ma50                Float?   // 50-day moving average

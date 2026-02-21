@@ -1,4 +1,16 @@
-VERCEL Webpage login password: ETFintel2026!
+---------------------------------------------
+VERCEL Webpage:
+ username: admin
+
+ login password: ETFintel2026!
+
+ZsGv7voddMT5XTNW
+----------------------------------------------
+postgresql://postgres:ZsGv7voddMT5XTNW@db.whryctfiroqxhqhnumke.supabase.co:5432/postgres
+postgresql://postgres.whryctfiroqxhqhnumke:ZsGv7voddMT5XTNW@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+postgresql://postgres.whryctfiroqxhqhnumke:YOURNEWPASSWORD@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+postgresql://postgres.whryctfiroqxhqhnumke:ETF_Intel_2026!@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+
 
 cd "C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence"
 cd apps\api
