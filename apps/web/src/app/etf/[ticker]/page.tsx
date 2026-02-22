@@ -477,6 +477,18 @@ function OverviewTab({ etf, metrics, holdings }: any) {
 function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRange }: any) {
   if (!metrics) return <CardSkeleton />;
 
+  // trailingReturns may arrive as a JSON string from the API — parse it safely
+  const trailingReturns = (() => {
+    const raw = metrics.trailingReturns;
+    if (!raw) return null;
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw); } catch { return null; }
+    }
+    return raw;
+  })();
+
+  const hasReturnData = trailingReturns && Object.values(trailingReturns).some((v) => v !== null);
+
   const betaColor = (v: number | null) => {
     if (v == null) return 'text-gray-400';
     if (v < 0.8) return 'text-green-600';
@@ -516,13 +528,13 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
         {prices ? <PriceChart data={prices} range={priceRange} /> : <ChartSkeleton />}
       </div>
 
-      {/* Trailing Returns — only show if data exists */}
-      {metrics.trailingReturns && Object.values(metrics.trailingReturns).some((v) => v !== null) && (
+      {/* Trailing Returns */}
+      {hasReturnData ? (
         <div className="card">
           <h3 className="card-header">Trailing Returns</h3>
-          <ReturnsChart returns={metrics.trailingReturns} />
+          <ReturnsChart returns={trailingReturns} />
           <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mt-6">
-            {Object.entries(metrics.trailingReturns).map(([period, value]) => (
+            {Object.entries(trailingReturns).map(([period, value]) => (
               <div key={period}>
                 <div className="text-sm text-gray-500">{period}</div>
                 <div className={`text-lg font-semibold ${getReturnColor(value as number)}`}>
@@ -533,6 +545,69 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
               </div>
             ))}
           </div>
+        </div>
+      ) : (
+        <div className="card opacity-60">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="card-header mb-0 text-gray-400">Trailing Returns</h3>
+            <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full font-medium">Coming soon</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {['1Y Return', '3Y Return', '5Y Return', 'YTD'].map((label) => (
+              <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
+                <div className="text-sm text-gray-400 mb-1">{label}</div>
+                <div className="text-2xl font-bold text-gray-300">—</div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-3 text-center">Requires EOD price data plan</p>
+        </div>
+      )}
+
+      {/* Risk-Adjusted Metrics */}
+      {(metrics.riskMetrics?.sharpe != null || metrics.riskMetrics?.volatility != null) ? (
+        <div className="card">
+          <h3 className="card-header">Risk-Adjusted Performance</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="text-sm text-gray-500 mb-1">Sharpe Ratio</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {metrics.riskMetrics?.sharpe?.toFixed(2) ?? 'N/A'}
+              </div>
+            </div>
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="text-sm text-gray-500 mb-1">Volatility</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {metrics.riskMetrics?.volatility != null
+                  ? `${(metrics.riskMetrics.volatility * 100).toFixed(1)}%`
+                  : 'N/A'}
+              </div>
+            </div>
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="text-sm text-gray-500 mb-1">Max Drawdown</div>
+              <div className="text-2xl font-bold text-red-500">
+                {metrics.riskMetrics?.maxDrawdown != null
+                  ? `-${(metrics.riskMetrics.maxDrawdown * 100).toFixed(1)}%`
+                  : 'N/A'}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="card opacity-60">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="card-header mb-0 text-gray-400">Risk-Adjusted Performance</h3>
+            <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full font-medium">Coming soon</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {['Sharpe Ratio', 'Volatility', 'Max Drawdown'].map((label) => (
+              <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
+                <div className="text-sm text-gray-400 mb-1">{label}</div>
+                <div className="text-2xl font-bold text-gray-300">—</div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-3 text-center">Requires EOD price data plan</p>
         </div>
       )}
 
@@ -592,11 +667,7 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
       )}
 
       {/* Technical Indicators — only show if snapshot data exists */}
-      {metrics.technicals && (
-        metrics.technicals.ma50 != null ||
-        metrics.technicals.ma200 != null ||
-        metrics.technicals.hi52w != null
-      ) && (
+      {metrics.technicals && (metrics.technicals.ma50 != null || metrics.technicals.ma200 != null || metrics.technicals.hi52w != null) && (
         <div className="card">
           <h3 className="card-header">Technical Indicators</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -708,7 +779,7 @@ function ThemesTab({ ticker, themes }: any) {
           <ThemeExposureChart
             exposures={themes.exposures.map((t: any) => ({
               themeName: t.themeName,
-              exposure: t.exposure,
+              exposure: t.exposure / 100, // stored as % (e.g. 26.95), chart expects decimal (0.2695)
             }))}
           />
         ) : (
