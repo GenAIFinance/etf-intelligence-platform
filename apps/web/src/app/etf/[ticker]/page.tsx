@@ -43,7 +43,6 @@ import {
 import { CardSkeleton, ChartSkeleton, TableSkeleton } from '@/components/ui/Skeleton';
 import {
   PriceChart,
-  ReturnsChart,
   SectorChart,
   ThemeExposureChart,
 } from '@/components/charts/Charts';
@@ -523,7 +522,7 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
           <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full font-medium">Coming soon</span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {['1Y Return', '3Y Return', '5Y Return', 'YTD'].map((label) => (
+          {(['1Y Return', '3Y Return', '5Y Return', 'YTD'] as string[]).map((label) => (
             <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
               <div className="text-sm text-gray-400 mb-1">{label}</div>
               <div className="text-2xl font-bold text-gray-300">—</div>
@@ -540,7 +539,7 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
           <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full font-medium">Coming soon</span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {['Sharpe Ratio', 'Volatility', 'Max Drawdown'].map((label) => (
+          {(['Sharpe Ratio', 'Volatility', 'Max Drawdown'] as string[]).map((label) => (
             <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
               <div className="text-sm text-gray-400 mb-1">{label}</div>
               <div className="text-2xl font-bold text-gray-300">—</div>
@@ -596,151 +595,9 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
           </div>
         </div>
       )}
-    </div>
-  );
-}
 
-
-      {/* Trailing Returns */}
-      {hasReturnData ? (
-        <div className="card">
-          <h3 className="card-header">Trailing Returns</h3>
-          
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mt-6">
-            {Object.entries(trailingReturns).map(([period, value]) => (
-              <div key={period}>
-                <div className="text-sm text-gray-500">{period}</div>
-                <div className={`text-lg font-semibold ${getReturnColor(value as number)}`}>
-                  {value !== null && value !== undefined
-                    ? formatPercent(value as number)
-                    : 'N/A'}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="card opacity-60">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="card-header mb-0 text-gray-400">Trailing Returns</h3>
-            <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full font-medium">Coming soon</span>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {['1Y Return', '3Y Return', '5Y Return', 'YTD'].map((label) => (
-              <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
-                <div className="text-sm text-gray-400 mb-1">{label}</div>
-                <div className="text-2xl font-bold text-gray-300">—</div>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-gray-400 mt-3 text-center">Requires EOD price data plan</p>
-        </div>
-      )}
-
-      {/* Risk-Adjusted Metrics */}
-      {(metrics.riskMetrics?.sharpe != null || metrics.riskMetrics?.volatility != null) ? (
-        <div className="card">
-          <h3 className="card-header">Risk-Adjusted Performance</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="text-sm text-gray-500 mb-1">Sharpe Ratio</div>
-              <div className="text-2xl font-bold text-gray-900">
-                {metrics.riskMetrics?.sharpe?.toFixed(2) ?? 'N/A'}
-              </div>
-            </div>
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="text-sm text-gray-500 mb-1">Volatility</div>
-              <div className="text-2xl font-bold text-gray-900">
-                {metrics.riskMetrics?.volatility != null
-                  ? `${(metrics.riskMetrics.volatility * 100).toFixed(1)}%`
-                  : 'N/A'}
-              </div>
-            </div>
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="text-sm text-gray-500 mb-1">Max Drawdown</div>
-              <div className="text-2xl font-bold text-red-500">
-                {metrics.riskMetrics?.maxDrawdown != null
-                  ? `-${(metrics.riskMetrics.maxDrawdown * 100).toFixed(1)}%`
-                  : 'N/A'}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="card opacity-60">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="card-header mb-0 text-gray-400">Risk-Adjusted Performance</h3>
-            <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full font-medium">Coming soon</span>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {['Sharpe Ratio', 'Volatility', 'Max Drawdown'].map((label) => (
-              <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
-                <div className="text-sm text-gray-400 mb-1">{label}</div>
-                <div className="text-2xl font-bold text-gray-300">—</div>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-gray-400 mt-3 text-center">Requires EOD price data plan</p>
-        </div>
-      )}
-
-      {/* Risk & Cost Metrics — uses data from fundamentals sync */}
-      {(etf?.betaVsMarket != null || etf?.dividendYield != null || etf?.netExpenseRatio != null) && (
-        <div className="card">
-          <h3 className="card-header">Risk & Income</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-
-            {/* Beta */}
-            {etf?.betaVsMarket != null && (
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="text-sm text-gray-500 mb-1">Beta vs Market</div>
-                <div className={`text-2xl font-bold ${betaColor(etf.betaVsMarket)}`}>
-                  {etf.betaVsMarket.toFixed(2)}
-                </div>
-                <div className="text-xs text-gray-400 mt-1">{betaLabel(etf.betaVsMarket)}</div>
-              </div>
-            )}
-
-            {/* Dividend Yield */}
-            {etf?.dividendYield != null && (
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="text-sm text-gray-500 mb-1">Dividend Yield</div>
-                <div className="text-2xl font-bold text-green-600">
-                  {etf.dividendYield.toFixed(2)}%
-                </div>
-                <div className="text-xs text-gray-400 mt-1">Annual distribution</div>
-              </div>
-            )}
-
-            {/* Expense Ratio */}
-            {etf?.netExpenseRatio != null && (
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="text-sm text-gray-500 mb-1">Expense Ratio</div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {(etf.netExpenseRatio * 100).toFixed(2)}%
-                </div>
-                <div className="text-xs text-gray-400 mt-1">Annual cost</div>
-              </div>
-            )}
-
-            {/* AUM */}
-            {etf?.aum != null && (
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="text-sm text-gray-500 mb-1">AUM</div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {etf.aum >= 1e9
-                    ? `$${(etf.aum / 1e9).toFixed(1)}B`
-                    : `$${(etf.aum / 1e6).toFixed(0)}M`}
-                </div>
-                <div className="text-xs text-gray-400 mt-1">Assets under management</div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Technical Indicators — only show if snapshot data exists */}
-      {metrics.technicals && (metrics.technicals.ma50 != null || metrics.technicals.ma200 != null || metrics.technicals.hi52w != null) && (
+      {/* Technical Indicators */}
+      {metrics.technicals && (
         <div className="card">
           <h3 className="card-header">Technical Indicators</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -852,7 +709,7 @@ function ThemesTab({ ticker, themes }: any) {
           <ThemeExposureChart
             exposures={themes.exposures.map((t: any) => ({
               themeName: t.themeName,
-              exposure: t.exposure / 100, // stored as % (e.g. 26.95), chart expects decimal (0.2695)
+              exposure: t.exposure / 100, // stored as % chart expects decimal
             }))}
           />
         ) : (
