@@ -19,10 +19,11 @@ interface RankingItem {
 
 interface RankingsData {
   top10: {
-    byAUM: RankingItem[];
+    highestReturn3Y: RankingItem[];
+    highestReturn5Y: RankingItem[];
     lowestExpenseRatio: RankingItem[];
-    lowestAnnualCost: RankingItem[];
-    highestSavings: RankingItem[];
+    highestSharpe: RankingItem[];
+    lowestDrawdown: RankingItem[];
     mostDiversified: RankingItem[];
   };
   meta: {
@@ -92,7 +93,7 @@ export default function Dashboard() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">ETF Intelligence Dashboard</h1>
-        <p className="text-gray-600">Discover top-ranked ETFs by cost, size, and diversification</p>
+        <p className="text-gray-600">Discover top-ranked ETFs by returns, cost, and risk metrics</p>
       </div>
 
       <div className="relative mb-8">
@@ -143,51 +144,61 @@ export default function Dashboard() {
       ) : rankings ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <RankingCard
-            title="Largest ETFs by AUM"
-            description="Top 10 ETFs by assets under management"
+            title="Highest 3Y Return"
+            description="Top 10 ETFs by 3-year trailing return"
+            icon={<TrendingUp className="w-5 h-5 text-green-600" />}
+            items={rankings.top10.highestReturn3Y}
+            viewAllLink="/etfs?sort=return3Y&order=desc"
+            iconBgColor="bg-green-100"
+            valueColor="return"
+          />
+
+          <RankingCard
+            title="Highest 5Y Return"
+            description="Top 10 ETFs by 5-year trailing return"
             icon={<TrendingUp className="w-5 h-5 text-blue-600" />}
-            items={rankings.top10.byAUM}
-            viewAllLink="/etfs?sort=aum&order=desc"
+            items={rankings.top10.highestReturn5Y}
+            viewAllLink="/etfs?sort=return5Y&order=desc"
             iconBgColor="bg-blue-100"
+            valueColor="return"
           />
 
           <RankingCard
             title="Lowest Expense Ratio"
-            description="Top 10 cheapest ETFs by expense ratio"
-            icon={<DollarSign className="w-5 h-5 text-green-600" />}
+            description="Top 10 cheapest ETFs by annual expense ratio"
+            icon={<DollarSign className="w-5 h-5 text-purple-600" />}
             items={rankings.top10.lowestExpenseRatio}
             viewAllLink="/etfs?sort=netExpenseRatio&order=asc"
-            iconBgColor="bg-green-100"
-          />
-
-          <RankingCard
-            title="Lowest Annual Cost"
-            description={`For $${(rankings.meta.investmentAmount / 1000).toFixed(0)}k investment`}
-            icon={<Sparkles className="w-5 h-5 text-purple-600" />}
-            items={rankings.top10.lowestAnnualCost}
-            viewAllLink="/etfs?sort=annualCost&order=asc&investment=10000"
             iconBgColor="bg-purple-100"
-            showSecondary
           />
 
           <RankingCard
-            title="Highest Savings vs Category Median"
-            description="ETFs with biggest cost advantage"
+            title="Highest Sharpe Ratio"
+            description="Best risk-adjusted returns over 1 year"
             icon={<BarChart3 className="w-5 h-5 text-orange-600" />}
-            items={rankings.top10.highestSavings}
-            viewAllLink="/etfs?sort=savings&order=desc&investment=10000"
+            items={rankings.top10.highestSharpe}
+            viewAllLink="/etfs?sort=sharpe&order=desc"
             iconBgColor="bg-orange-100"
-            showSecondary
-            tooltip="Savings calculated by comparing ETF expense ratio to category median"
+            tooltip="Sharpe ratio = (1Y return − risk-free rate) / volatility. Higher is better."
+          />
+
+          <RankingCard
+            title="Lowest Max Drawdown"
+            description="ETFs with smallest peak-to-trough decline (5Y)"
+            icon={<Sparkles className="w-5 h-5 text-indigo-600" />}
+            items={rankings.top10.lowestDrawdown}
+            viewAllLink="/etfs?sort=maxDrawdown&order=asc"
+            iconBgColor="bg-indigo-100"
+            tooltip="Max drawdown measures the largest peak-to-trough loss over 5 years. Lower is better."
           />
 
           <RankingCard
             title="Most Diversified ETFs"
             description="Top 10 by number of holdings"
-            icon={<PieChart className="w-5 h-5 text-indigo-600" />}
+            icon={<PieChart className="w-5 h-5 text-pink-600" />}
             items={rankings.top10.mostDiversified}
             viewAllLink="/etfs?sort=holdings&order=desc"
-            iconBgColor="bg-indigo-100"
+            iconBgColor="bg-pink-100"
           />
 
           <div className="card bg-gradient-to-br from-primary-50 to-blue-50 border-2 border-primary-200">
@@ -200,7 +211,7 @@ export default function Dashboard() {
                 <div className="text-sm text-gray-600">ETFs in Database</div>
               </div>
               <div>
-                <div className="text-3xl font-bold text-primary-600">5</div>
+                <div className="text-3xl font-bold text-primary-600">6</div>
                 <div className="text-sm text-gray-600">Ranking Categories</div>
               </div>
               <div className="pt-4 border-t border-primary-200">
@@ -268,6 +279,7 @@ function RankingCard({
   iconBgColor,
   showSecondary = false,
   tooltip,
+  valueColor,
 }: {
   title: string;
   description: string;
@@ -277,6 +289,7 @@ function RankingCard({
   iconBgColor: string;
   showSecondary?: boolean;
   tooltip?: string;
+  valueColor?: 'return' | 'default';
 }) {
   return (
     <div className="card hover:shadow-md transition-shadow">
@@ -323,7 +336,13 @@ function RankingCard({
                 </div>
               </div>
               <div className="text-right flex-shrink-0 ml-2">
-                <div className="font-medium text-gray-900 text-sm">{item.formattedValue}</div>
+                <div className={`font-medium text-sm ${
+                  valueColor === 'return'
+                    ? item.value >= 0 ? 'text-green-600 font-semibold' : 'text-red-500 font-semibold'
+                    : 'text-gray-900'
+                }`}>
+                  {item.formattedValue}
+                </div>
                 {showSecondary && item.formattedSecondaryValue && (
                   <div className="text-xs text-gray-500">{item.formattedSecondaryValue}</div>
                 )}

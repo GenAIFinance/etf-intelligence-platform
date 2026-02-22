@@ -1,4 +1,4 @@
-// ETF Rankings Service - FINAL FIX
+// ETF Rankings Service
 // apps/api/src/services/rankings.ts
 
 import prisma from '../db';
@@ -15,10 +15,11 @@ export interface RankingItem {
 
 export interface RankingsResponse {
   top10: {
-    byAUM: RankingItem[];
+    highestReturn3Y: RankingItem[];
+    highestReturn5Y: RankingItem[];
     lowestExpenseRatio: RankingItem[];
-    lowestAnnualCost: RankingItem[];
-    highestSavings: RankingItem[];
+    highestSharpe: RankingItem[];
+    lowestDrawdown: RankingItem[];
     mostDiversified: RankingItem[];
   };
   meta: {
@@ -29,14 +30,14 @@ export interface RankingsResponse {
 }
 
 export class RankingsService {
-  
+
   /**
    * Get all Top 10 rankings for dashboard
    */
   async getTop10Rankings(investmentAmount: number = 10000): Promise<RankingsResponse> {
     console.log('📊 Fetching Top 10 rankings...');
 
-    // Fetch all ETFs with necessary fields (removed holdingsCount)
+    // Fetch ETFs with holdings count
     const etfs = await prisma.etf.findMany({
       select: {
         ticker: true,
@@ -50,18 +51,50 @@ export class RankingsService {
       },
     });
 
-    console.log(`✓ Loaded ${etfs.length} ETFs`);
+    // Fetch latest metric snapshot per ETF
+    // Use subquery approach: get most recent asOfDate per etfId
+    const snapshots = await prisma.etfMetricSnapshot.findMany({
+      where: {
+        OR: [
+          { return3Y: { not: null } },
+          { return5Y: { not: null } },
+          { sharpe: { not: null } },
+          { maxDrawdown: { not: null } },
+        ]
+      },
+      orderBy: { asOfDate: 'desc' },
+      select: {
+        etfId: true,
+        asOfDate: true,
+        return3Y: true,
+        return5Y: true,
+        sharpe: true,
+        maxDrawdown: true,
+        etf: {
+          select: { ticker: true, name: true }
+        }
+      },
+    });
 
-    // Compute category medians for savings calculation
-    const categoryMedians = this.computeCategoryMedians(etfs);
+    // Deduplicate — keep only the latest snapshot per ETF
+    const latestSnapshots = new Map<string, typeof snapshots[0]>();
+    for (const s of snapshots) {
+      if (!latestSnapshots.has(s.etfId)) {
+        latestSnapshots.set(s.etfId, s);
+      }
+    }
+    const snapshotList = Array.from(latestSnapshots.values());
+
+    console.log(`✓ Loaded ${etfs.length} ETFs, ${snapshotList.length} metric snapshots`);
 
     const rankings: RankingsResponse = {
       top10: {
-        byAUM: this.getTopByAUM(etfs),
+        highestReturn3Y:   this.getHighestReturn3Y(snapshotList),
+        highestReturn5Y:   this.getHighestReturn5Y(snapshotList),
         lowestExpenseRatio: this.getLowestExpenseRatio(etfs),
-        lowestAnnualCost: this.getLowestAnnualCost(etfs, investmentAmount),
-        highestSavings: this.getHighestSavings(etfs, categoryMedians, investmentAmount),
-        mostDiversified: this.getMostDiversified(etfs),
+        highestSharpe:     this.getHighestSharpe(snapshotList),
+        lowestDrawdown:    this.getLowestDrawdown(snapshotList),
+        mostDiversified:   this.getMostDiversified(etfs),
       },
       meta: {
         totalETFs: etfs.length,
@@ -75,139 +108,92 @@ export class RankingsService {
   }
 
   /**
-   * Top 10 ETFs by AUM (Largest)
+   * Top 10 ETFs by highest 3Y trailing return
    */
-  private getTopByAUM(etfs: any[]): RankingItem[] {
-    return etfs
-      .filter(e => e.aum !== null && e.aum > 0)
-      .sort((a, b) => (b.aum || 0) - (a.aum || 0))
+  private getHighestReturn3Y(snapshots: any[]): RankingItem[] {
+    return snapshots
+      .filter(s => s.return3Y !== null && s.return3Y !== undefined)
+      .sort((a, b) => (b.return3Y ?? -Infinity) - (a.return3Y ?? -Infinity))
       .slice(0, 10)
-      .map((etf, index) => ({
+      .map((s, index) => ({
         rank: index + 1,
-        ticker: etf.ticker,
-        name: etf.name,
-        value: etf.aum!,
-        formattedValue: this.formatAUM(etf.aum!),
+        ticker: s.etf.ticker,
+        name: s.etf.name,
+        value: s.return3Y!,
+        formattedValue: this.formatReturn(s.return3Y!),
       }));
   }
 
   /**
-   * Top 10 ETFs with Lowest Expense Ratio
+   * Top 10 ETFs by highest 5Y trailing return
+   */
+  private getHighestReturn5Y(snapshots: any[]): RankingItem[] {
+    return snapshots
+      .filter(s => s.return5Y !== null && s.return5Y !== undefined)
+      .sort((a, b) => (b.return5Y ?? -Infinity) - (a.return5Y ?? -Infinity))
+      .slice(0, 10)
+      .map((s, index) => ({
+        rank: index + 1,
+        ticker: s.etf.ticker,
+        name: s.etf.name,
+        value: s.return5Y!,
+        formattedValue: this.formatReturn(s.return5Y!),
+      }));
+  }
+
+  /**
+   * Top 10 ETFs with lowest expense ratio
    */
   private getLowestExpenseRatio(etfs: any[]): RankingItem[] {
     return etfs
       .filter(e => e.netExpenseRatio !== null && e.netExpenseRatio >= 0)
-      .sort((a, b) => (a.netExpenseRatio || Infinity) - (b.netExpenseRatio || Infinity))
+      .sort((a, b) => (a.netExpenseRatio ?? Infinity) - (b.netExpenseRatio ?? Infinity))
       .slice(0, 10)
       .map((etf, index) => ({
         rank: index + 1,
         ticker: etf.ticker,
         name: etf.name,
         value: etf.netExpenseRatio!,
-        formattedValue: `${etf.netExpenseRatio!.toFixed(2)}%`,
+        formattedValue: `${(etf.netExpenseRatio! * 100).toFixed(2)}%`,
       }));
   }
 
   /**
-   * Top 10 ETFs with Lowest Annual Cost (for $10k investment)
+   * Top 10 ETFs by highest Sharpe ratio (best risk-adjusted return)
    */
-  private getLowestAnnualCost(etfs: any[], investment: number): RankingItem[] {
-    return etfs
-      .filter(e => e.netExpenseRatio !== null && e.netExpenseRatio >= 0)
-      .map(etf => ({
-        ...etf,
-        annualCost: investment * (etf.netExpenseRatio / 100),
-      }))
-      .sort((a, b) => a.annualCost - b.annualCost)
+  private getHighestSharpe(snapshots: any[]): RankingItem[] {
+    return snapshots
+      .filter(s => s.sharpe !== null && s.sharpe !== undefined)
+      .sort((a, b) => (b.sharpe ?? -Infinity) - (a.sharpe ?? -Infinity))
       .slice(0, 10)
-      .map((etf, index) => ({
+      .map((s, index) => ({
         rank: index + 1,
-        ticker: etf.ticker,
-        name: etf.name,
-        value: etf.annualCost,
-        formattedValue: `$${etf.annualCost.toFixed(2)}/yr`,
-        secondaryValue: etf.netExpenseRatio,
-        formattedSecondaryValue: `${etf.netExpenseRatio.toFixed(2)}%`,
+        ticker: s.etf.ticker,
+        name: s.etf.name,
+        value: s.sharpe!,
+        formattedValue: s.sharpe!.toFixed(2),
       }));
   }
 
   /**
-   * Compute median expense ratio for each category
+   * Top 10 ETFs with lowest max drawdown (most defensive)
    */
-  private computeCategoryMedians(etfs: any[]): Map<string, number> {
-    const byCategory = new Map<string, number[]>();
-    
-    // Group expense ratios by category
-    etfs.forEach(etf => {
-      if (etf.netExpenseRatio === null || etf.netExpenseRatio < 0) return;
-      
-      const category = etf.assetClass || 'Other';
-      if (!byCategory.has(category)) {
-        byCategory.set(category, []);
-      }
-      byCategory.get(category)!.push(etf.netExpenseRatio);
-    });
-
-    // Calculate median for each category
-    const medians = new Map<string, number>();
-    byCategory.forEach((values, category) => {
-      if (values.length === 0) return;
-      
-      values.sort((a, b) => a - b);
-      const mid = Math.floor(values.length / 2);
-      const median = values.length % 2 === 0
-        ? (values[mid - 1] + values[mid]) / 2
-        : values[mid];
-      
-      medians.set(category, median);
-    });
-
-    return medians;
-  }
-
-  /**
-   * Top 10 ETFs with Highest Savings vs Category Median
-   */
-  private getHighestSavings(
-    etfs: any[], 
-    categoryMedians: Map<string, number>,
-    investment: number
-  ): RankingItem[] {
-    return etfs
-      .filter(e => 
-        e.netExpenseRatio !== null && 
-        e.netExpenseRatio >= 0 &&
-        e.assetClass &&
-        categoryMedians.has(e.assetClass)
-      )
-      .map(etf => {
-        const categoryMedian = categoryMedians.get(etf.assetClass!)!;
-        const savingsBps = (categoryMedian - etf.netExpenseRatio) * 10000;
-        const savingsUSD = investment * (categoryMedian - etf.netExpenseRatio) / 100;
-        
-        return {
-          ...etf,
-          categoryMedian,
-          savingsUSD,
-          savingsBps,
-        };
-      })
-      .filter(e => e.savingsUSD > 0)
-      .sort((a, b) => b.savingsUSD - a.savingsUSD)
+  private getLowestDrawdown(snapshots: any[]): RankingItem[] {
+    return snapshots
+      .filter(s => s.maxDrawdown !== null && s.maxDrawdown !== undefined && s.maxDrawdown >= 0)
+      .sort((a, b) => (a.maxDrawdown ?? Infinity) - (b.maxDrawdown ?? Infinity))
       .slice(0, 10)
-      .map((etf, index) => ({
+      .map((s, index) => ({
         rank: index + 1,
-        ticker: etf.ticker,
-        name: etf.name,
-        value: etf.savingsUSD,
-        formattedValue: `$${etf.savingsUSD.toFixed(2)}/yr`,
-        secondaryValue: etf.savingsBps,
-        formattedSecondaryValue: `${etf.savingsBps.toFixed(0)} bps`,
+        ticker: s.etf.ticker,
+        name: s.etf.name,
+        value: s.maxDrawdown!,
+        formattedValue: `-${(s.maxDrawdown! * 100).toFixed(1)}%`,
       }));
   }
 
   /**
-   * Top 10 Most Diversified ETFs (by holdings count from relation)
+   * Top 10 most diversified ETFs by holdings count
    */
   private getMostDiversified(etfs: any[]): RankingItem[] {
     return etfs
@@ -221,6 +207,14 @@ export class RankingsService {
         value: etf._count.holdings,
         formattedValue: `${etf._count.holdings.toLocaleString()} holdings`,
       }));
+  }
+
+  /**
+   * Format return as percentage string with sign
+   */
+  private formatReturn(value: number): string {
+    const pct = (value * 100).toFixed(1);
+    return value >= 0 ? `+${pct}%` : `${pct}%`;
   }
 
   /**
