@@ -147,7 +147,7 @@ export default function Dashboard() {
             title="Highest 3Y Return"
             description="Top 10 ETFs by 3-year trailing return"
             icon={<TrendingUp className="w-5 h-5 text-green-600" />}
-            items={rankings.top10.highestReturn3Y}
+            items={rankings.top10.highestReturn3Y ?? []}
             viewAllLink="/etfs?sort=return3Y&order=desc"
             iconBgColor="bg-green-100"
             valueColor="return"
@@ -157,7 +157,7 @@ export default function Dashboard() {
             title="Highest 5Y Return"
             description="Top 10 ETFs by 5-year trailing return"
             icon={<TrendingUp className="w-5 h-5 text-blue-600" />}
-            items={rankings.top10.highestReturn5Y}
+            items={rankings.top10.highestReturn5Y ?? []}
             viewAllLink="/etfs?sort=return5Y&order=desc"
             iconBgColor="bg-blue-100"
             valueColor="return"
@@ -167,7 +167,7 @@ export default function Dashboard() {
             title="Lowest Expense Ratio"
             description="Top 10 cheapest ETFs by annual expense ratio"
             icon={<DollarSign className="w-5 h-5 text-purple-600" />}
-            items={rankings.top10.lowestExpenseRatio}
+            items={rankings.top10.lowestExpenseRatio ?? []}
             viewAllLink="/etfs?sort=netExpenseRatio&order=asc"
             iconBgColor="bg-purple-100"
           />
@@ -176,7 +176,7 @@ export default function Dashboard() {
             title="Highest Sharpe Ratio"
             description="Best risk-adjusted returns over 1 year"
             icon={<BarChart3 className="w-5 h-5 text-orange-600" />}
-            items={rankings.top10.highestSharpe}
+            items={rankings.top10.highestSharpe ?? []}
             viewAllLink="/etfs?sort=sharpe&order=desc"
             iconBgColor="bg-orange-100"
             tooltip="Sharpe ratio = (1Y return − risk-free rate) / volatility. Higher is better."
@@ -186,7 +186,7 @@ export default function Dashboard() {
             title="Lowest Max Drawdown"
             description="ETFs with smallest peak-to-trough decline (5Y)"
             icon={<Sparkles className="w-5 h-5 text-indigo-600" />}
-            items={rankings.top10.lowestDrawdown}
+            items={rankings.top10.lowestDrawdown ?? []}
             viewAllLink="/etfs?sort=maxDrawdown&order=asc"
             iconBgColor="bg-indigo-100"
             tooltip="Max drawdown measures the largest peak-to-trough loss over 5 years. Lower is better."
@@ -196,7 +196,7 @@ export default function Dashboard() {
             title="Most Diversified ETFs"
             description="Top 10 by number of holdings"
             icon={<PieChart className="w-5 h-5 text-pink-600" />}
-            items={rankings.top10.mostDiversified}
+            items={rankings.top10.mostDiversified ?? []}
             viewAllLink="/etfs?sort=holdings&order=desc"
             iconBgColor="bg-pink-100"
           />
@@ -274,7 +274,7 @@ function RankingCard({
   title,
   description,
   icon,
-  items,
+  items = [],
   viewAllLink,
   iconBgColor,
   showSecondary = false,
@@ -284,7 +284,7 @@ function RankingCard({
   title: string;
   description: string;
   icon: React.ReactNode;
-  items: RankingItem[];
+  items?: RankingItem[];
   viewAllLink: string;
   iconBgColor: string;
   showSecondary?: boolean;
