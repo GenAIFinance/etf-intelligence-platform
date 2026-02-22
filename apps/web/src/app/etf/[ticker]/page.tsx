@@ -477,21 +477,6 @@ function OverviewTab({ etf, metrics, holdings }: any) {
 function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRange }: any) {
   if (!metrics) return <CardSkeleton />;
 
-  // trailingReturns may arrive as a JSON string from the API — parse it safely
-  const trailingReturns = (() => {
-    const raw = metrics.trailingReturns;
-    if (!raw) return null;
-    if (typeof raw === 'string') {
-      try { return JSON.parse(raw); } catch { return null; }
-    }
-    return raw;
-  })();
-
-  const hasReturnData = trailingReturns && 
-    typeof trailingReturns === 'object' &&
-    !Array.isArray(trailingReturns) &&
-    Object.values(trailingReturns).some((v) => v !== null);
-
   const betaColor = (v: number | null) => {
     if (v == null) return 'text-gray-400';
     if (v < 0.8) return 'text-green-600';
@@ -530,6 +515,91 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
         </div>
         {prices ? <PriceChart data={prices} range={priceRange} /> : <ChartSkeleton />}
       </div>
+
+      {/* Trailing Returns — Coming Soon */}
+      <div className="card opacity-60">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="card-header mb-0 text-gray-400">Trailing Returns</h3>
+          <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full font-medium">Coming soon</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {['1Y Return', '3Y Return', '5Y Return', 'YTD'].map((label) => (
+            <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
+              <div className="text-sm text-gray-400 mb-1">{label}</div>
+              <div className="text-2xl font-bold text-gray-300">—</div>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-gray-400 mt-3 text-center">Requires EOD price data plan</p>
+      </div>
+
+      {/* Risk-Adjusted Performance — Coming Soon */}
+      <div className="card opacity-60">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="card-header mb-0 text-gray-400">Risk-Adjusted Performance</h3>
+          <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full font-medium">Coming soon</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {['Sharpe Ratio', 'Volatility', 'Max Drawdown'].map((label) => (
+            <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
+              <div className="text-sm text-gray-400 mb-1">{label}</div>
+              <div className="text-2xl font-bold text-gray-300">—</div>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-gray-400 mt-3 text-center">Requires EOD price data plan</p>
+      </div>
+
+      {/* Risk & Income — live data from fundamentals sync */}
+      {(etf?.betaVsMarket != null || etf?.dividendYield != null || etf?.netExpenseRatio != null) && (
+        <div className="card">
+          <h3 className="card-header">Risk & Income</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {etf?.betaVsMarket != null && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="text-sm text-gray-500 mb-1">Beta vs Market</div>
+                <div className={`text-2xl font-bold ${betaColor(etf.betaVsMarket)}`}>
+                  {etf.betaVsMarket.toFixed(2)}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">{betaLabel(etf.betaVsMarket)}</div>
+              </div>
+            )}
+            {etf?.dividendYield != null && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="text-sm text-gray-500 mb-1">Dividend Yield</div>
+                <div className="text-2xl font-bold text-green-600">
+                  {etf.dividendYield.toFixed(2)}%
+                </div>
+                <div className="text-xs text-gray-400 mt-1">Annual distribution</div>
+              </div>
+            )}
+            {etf?.netExpenseRatio != null && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="text-sm text-gray-500 mb-1">Expense Ratio</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {(etf.netExpenseRatio * 100).toFixed(2)}%
+                </div>
+                <div className="text-xs text-gray-400 mt-1">Annual cost</div>
+              </div>
+            )}
+            {etf?.aum != null && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="text-sm text-gray-500 mb-1">AUM</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {etf.aum >= 1e9
+                    ? `$${(etf.aum / 1e9).toFixed(1)}B`
+                    : `$${(etf.aum / 1e6).toFixed(0)}M`}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">Assets under management</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
       {/* Trailing Returns */}
       {hasReturnData ? (
