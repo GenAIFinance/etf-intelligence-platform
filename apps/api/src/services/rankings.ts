@@ -79,8 +79,9 @@ export class RankingsService {
     // Deduplicate — keep only the latest snapshot per ETF
     const latestSnapshots = new Map<string, typeof snapshots[0]>();
     for (const s of snapshots) {
-      if (!latestSnapshots.has(s.etfId)) {
-        latestSnapshots.set(s.etfId, s);
+      const key = String(s.etfId);
+      if (!latestSnapshots.has(key)) {
+        latestSnapshots.set(key, s);
       }
     }
     const snapshotList = Array.from(latestSnapshots.values());
@@ -217,15 +218,7 @@ export class RankingsService {
     return value >= 0 ? `+${pct}%` : `${pct}%`;
   }
 
-  /**
-   * Format AUM for display
-   */
-  private formatAUM(aum: number): string {
-    if (aum >= 1e9) return `$${(aum / 1e9).toFixed(1)}B`;
-    if (aum >= 1e6) return `$${(aum / 1e6).toFixed(1)}M`;
-    if (aum >= 1e3) return `$${(aum / 1e3).toFixed(1)}K`;
-    return `$${aum.toFixed(0)}`;
-  }
+
 }
 
 export const rankingsService = new RankingsService();
