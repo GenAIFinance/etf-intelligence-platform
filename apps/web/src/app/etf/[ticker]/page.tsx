@@ -487,7 +487,10 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
     return raw;
   })();
 
-  const hasReturnData = trailingReturns && Object.values(trailingReturns).some((v) => v !== null);
+  const hasReturnData = trailingReturns && 
+    typeof trailingReturns === 'object' &&
+    !Array.isArray(trailingReturns) &&
+    Object.values(trailingReturns).some((v) => v !== null);
 
   const betaColor = (v: number | null) => {
     if (v == null) return 'text-gray-400';
@@ -532,7 +535,7 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
       {hasReturnData ? (
         <div className="card">
           <h3 className="card-header">Trailing Returns</h3>
-          <ReturnsChart returns={trailingReturns} />
+          
           <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mt-6">
             {Object.entries(trailingReturns).map(([period, value]) => (
               <div key={period}>
