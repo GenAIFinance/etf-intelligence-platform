@@ -520,39 +520,120 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
         })()}
       </div>
 
-      {/* Trailing Returns — Coming Soon */}
-      <div className="card opacity-60">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="card-header mb-0 text-gray-400">Trailing Returns</h3>
-          <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full font-medium">Coming soon</span>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {(['1Y Return', '3Y Return', '5Y Return', 'YTD'] as string[]).map((label) => (
-            <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
-              <div className="text-sm text-gray-400 mb-1">{label}</div>
-              <div className="text-2xl font-bold text-gray-300">—</div>
+      {/* Trailing Returns */}
+      {(() => {
+        const tr = metrics.trailingReturns;
+        const hasData = tr && typeof tr === 'object' &&
+          Object.values(tr).some((v) => v !== null && v !== undefined);
+        const fmtReturn = (v: any) => {
+          if (v === null || v === undefined) return 'N/A';
+          const pct = (v * 100).toFixed(2);
+          return v >= 0 ? `+${pct}%` : `${pct}%`;
+        };
+        const retColor = (v: any) => {
+          if (v === null || v === undefined) return 'text-gray-400';
+          return v >= 0 ? 'text-green-600' : 'text-red-500';
+        };
+        const periods = [
+          { key: '1M', label: '1 Month' },
+          { key: '3M', label: '3 Month' },
+          { key: '6M', label: '6 Month' },
+          { key: '1Y', label: '1 Year' },
+          { key: '3Y', label: '3 Year' },
+          { key: '5Y', label: '5 Year' },
+          { key: 'YTD', label: 'YTD' },
+        ];
+        if (!hasData) return (
+          <div className="card opacity-60">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="card-header mb-0 text-gray-400">Trailing Returns</h3>
+              <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full font-medium">No data</span>
             </div>
-          ))}
-        </div>
-        <p className="text-xs text-gray-400 mt-3 text-center">Requires EOD price data plan</p>
-      </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {(['1Y Return', '3Y Return', '5Y Return', 'YTD'] as string[]).map((label) => (
+                <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
+                  <div className="text-sm text-gray-400 mb-1">{label}</div>
+                  <div className="text-2xl font-bold text-gray-300">—</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+        return (
+          <div className="card">
+            <h3 className="card-header">Trailing Returns</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {periods.map(({ key, label }) => (
+                <div key={key} className="p-4 bg-gray-50 rounded-lg text-center">
+                  <div className="text-sm text-gray-500 mb-1">{label}</div>
+                  <div className={`text-2xl font-bold ${retColor(tr[key])}`}>
+                    {fmtReturn(tr[key])}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
-      {/* Risk-Adjusted Performance — Coming Soon */}
-      <div className="card opacity-60">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="card-header mb-0 text-gray-400">Risk-Adjusted Performance</h3>
-          <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full font-medium">Coming soon</span>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {(['Sharpe Ratio', 'Volatility', 'Max Drawdown'] as string[]).map((label) => (
-            <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
-              <div className="text-sm text-gray-400 mb-1">{label}</div>
-              <div className="text-2xl font-bold text-gray-300">—</div>
+      {/* Risk-Adjusted Performance */}
+      {(() => {
+        const rm = metrics.riskMetrics;
+        const hasRisk = rm && (rm.sharpe != null || rm.volatility != null || rm.maxDrawdown != null);
+        const sharpeColor = (v: any) => {
+          if (v == null) return 'text-gray-400';
+          if (v >= 2) return 'text-green-600';
+          if (v >= 1) return 'text-blue-600';
+          if (v >= 0) return 'text-orange-500';
+          return 'text-red-500';
+        };
+        if (!hasRisk) return (
+          <div className="card opacity-60">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="card-header mb-0 text-gray-400">Risk-Adjusted Performance</h3>
+              <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full font-medium">No data</span>
             </div>
-          ))}
-        </div>
-        <p className="text-xs text-gray-400 mt-3 text-center">Requires EOD price data plan</p>
-      </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {(['Sharpe Ratio', 'Volatility', 'Max Drawdown'] as string[]).map((label) => (
+                <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
+                  <div className="text-sm text-gray-400 mb-1">{label}</div>
+                  <div className="text-2xl font-bold text-gray-300">—</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+        return (
+          <div className="card">
+            <h3 className="card-header">Risk-Adjusted Performance</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="text-sm text-gray-500 mb-1">Sharpe Ratio</div>
+                <div className={`text-2xl font-bold ${sharpeColor(rm.sharpe)}`}>
+                  {rm.sharpe != null ? rm.sharpe.toFixed(2) : 'N/A'}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">
+                  {rm.sharpe == null ? '' : rm.sharpe >= 2 ? 'Excellent' : rm.sharpe >= 1 ? 'Good' : rm.sharpe >= 0 ? 'Below average' : 'Poor'}
+                </div>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="text-sm text-gray-500 mb-1">Volatility</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {rm.volatility != null ? `${(rm.volatility * 100).toFixed(1)}%` : 'N/A'}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">Annualized</div>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="text-sm text-gray-500 mb-1">Max Drawdown</div>
+                <div className="text-2xl font-bold text-red-500">
+                  {rm.maxDrawdown != null ? `-${(rm.maxDrawdown * 100).toFixed(1)}%` : 'N/A'}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">5Y peak to trough</div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Risk & Income — live data from fundamentals sync */}
       {(etf?.betaVsMarket != null || etf?.dividendYield != null || etf?.netExpenseRatio != null) && (
