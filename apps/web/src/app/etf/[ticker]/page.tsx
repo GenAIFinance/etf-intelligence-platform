@@ -512,7 +512,12 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
             ))}
           </div>
         </div>
-        {prices ? <PriceChart data={prices} range={priceRange} /> : <ChartSkeleton />}
+        {(() => {
+          const priceArr = Array.isArray(prices) ? prices : prices?.prices;
+          return priceArr?.length > 0
+            ? <PriceChart data={priceArr} range={priceRange} />
+            : <ChartSkeleton />;
+        })()}
       </div>
 
       {/* Trailing Returns — Coming Soon */}
