@@ -477,34 +477,19 @@ function OverviewTab({ etf, metrics, holdings }: any) {
 function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRange }: any) {
   if (!metrics) return <CardSkeleton />;
 
-  // Helper: format return value (stored as decimal e.g. 0.15 = 15%)
-  const fmtReturn = (val: number | null | undefined) => {
-    if (val == null) return 'N/A';
-    const pct = (val * 100).toFixed(2);
-    return val >= 0 ? `+${pct}%` : `${pct}%`;
-  };
-
-  const returnColor = (val: number | null | undefined) => {
-    if (val == null) return 'text-gray-400';
-    return val >= 0 ? 'text-green-600' : 'text-red-600';
-  };
-
-  const sharpeColor = (val: number | null | undefined) => {
-    if (val == null) return 'text-gray-400';
-    if (val >= 1) return 'text-green-600';
-    if (val >= 0.5) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const betaColor = (val: number | null | undefined) => {
-    if (val == null) return 'text-gray-400';
-    if (val < 0.8) return 'text-green-600';
-    if (val <= 1.2) return 'text-blue-600';
+  const betaColor = (v: number | null) => {
+    if (v == null) return 'text-gray-400';
+    if (v < 0.8) return 'text-green-600';
+    if (v <= 1.2) return 'text-blue-600';
     return 'text-orange-600';
   };
 
-  const returns = metrics.trailingReturns || {};
-  const risk = metrics.riskMetrics || {};
+  const betaLabel = (v: number | null) => {
+    if (v == null) return null;
+    if (v < 0.8) return 'Defensive';
+    if (v <= 1.2) return 'Market-like';
+    return 'Aggressive';
+  };
 
   return (
     <div className="space-y-6">
@@ -531,107 +516,44 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
         {prices ? <PriceChart data={prices} range={priceRange} /> : <ChartSkeleton />}
       </div>
 
-      {/* Trailing Returns - Key Periods */}
-      <div className="card">
-        <h3 className="card-header">Trailing Returns</h3>
-        {/* Key periods prominent display */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {[
-            { label: '1 Year', value: returns['1Y'] },
-            { label: '3 Year', value: returns['3Y'] },
-            { label: '5 Year', value: returns['5Y'] },
-            { label: 'YTD',    value: returns['YTD'] },
-          ].map(({ label, value }) => (
-            <div key={label} className="p-4 bg-gray-50 rounded-lg text-center">
-              <div className="text-sm text-gray-500 mb-1">{label}</div>
-              <div className={`text-2xl font-bold ${returnColor(value)}`}>
-                {fmtReturn(value)}
-              </div>
-            </div>
-          ))}
-        </div>
-        {/* All periods */}
-        {Object.keys(returns).length > 0 && (
-          <>
-            <ReturnsChart returns={returns} />
-            <div className="grid grid-cols-3 md:grid-cols-7 gap-3 mt-4">
-              {Object.entries(returns).map(([period, value]) => (
-                <div key={period} className="text-center">
-                  <div className="text-xs text-gray-500 mb-0.5">{period}</div>
-                  <div className={`text-sm font-semibold ${returnColor(value as number)}`}>
-                    {fmtReturn(value as number)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-        {Object.keys(returns).length === 0 && (
-          <p className="text-gray-400 text-sm text-center py-4">
-            Price data not yet synced — run the daily sync to populate returns
-          </p>
-        )}
-      </div>
-
-      {/* Risk-Adjusted Performance */}
-      <div className="card">
-        <h3 className="card-header">Risk-Adjusted Performance</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* Sharpe Ratio */}
-          <div className="p-4 bg-gray-50 rounded-lg">
-            <div className="text-sm text-gray-500 mb-1">Sharpe Ratio</div>
-            <div className={`text-2xl font-bold ${sharpeColor(risk.sharpe)}`}>
-              {risk.sharpe != null ? risk.sharpe.toFixed(2) : 'N/A'}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">
-              {risk.sharpe == null ? 'Awaiting sync' :
-               risk.sharpe >= 1 ? 'Good risk-adjusted return' :
-               risk.sharpe >= 0.5 ? 'Moderate' : 'Below average'}
-            </div>
-          </div>
-
-          {/* Volatility */}
-          <div className="p-4 bg-gray-50 rounded-lg">
-            <div className="text-sm text-gray-500 mb-1">Volatility (Ann.)</div>
-            <div className="text-2xl font-bold text-gray-900">
-              {risk.volatility != null ? `${(risk.volatility * 100).toFixed(1)}%` : 'N/A'}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">
-              {risk.volatility == null ? 'Awaiting sync' :
-               risk.volatility < 0.1 ? 'Low volatility' :
-               risk.volatility < 0.2 ? 'Moderate' : 'High volatility'}
-            </div>
-          </div>
-
-          {/* Max Drawdown */}
-          <div className="p-4 bg-gray-50 rounded-lg">
-            <div className="text-sm text-gray-500 mb-1">Max Drawdown</div>
-            <div className="text-2xl font-bold text-red-600">
-              {risk.maxDrawdown != null ? `-${(risk.maxDrawdown * 100).toFixed(1)}%` : 'N/A'}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">Worst peak-to-trough</div>
-          </div>
-
-          {/* Beta */}
-          <div className="p-4 bg-gray-50 rounded-lg">
-            <div className="text-sm text-gray-500 mb-1">Beta vs Market</div>
-            <div className={`text-2xl font-bold ${betaColor(risk.beta)}`}>
-              {risk.beta != null ? risk.beta.toFixed(2) : 'N/A'}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">
-              {risk.beta == null ? 'Awaiting sync' :
-               risk.beta < 0.8 ? 'Defensive (<0.8)' :
-               risk.beta <= 1.2 ? 'Market-like (0.8–1.2)' : 'Aggressive (>1.2)'}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Yield & Income */}
-      {(etf?.dividendYield || etf?.netExpenseRatio) && (
+      {/* Trailing Returns — only show if data exists */}
+      {metrics.trailingReturns && Object.values(metrics.trailingReturns).some((v) => v !== null) && (
         <div className="card">
-          <h3 className="card-header">Yield & Cost</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <h3 className="card-header">Trailing Returns</h3>
+          <ReturnsChart returns={metrics.trailingReturns} />
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mt-6">
+            {Object.entries(metrics.trailingReturns).map(([period, value]) => (
+              <div key={period}>
+                <div className="text-sm text-gray-500">{period}</div>
+                <div className={`text-lg font-semibold ${getReturnColor(value as number)}`}>
+                  {value !== null && value !== undefined
+                    ? formatPercent(value as number)
+                    : 'N/A'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Risk & Cost Metrics — uses data from fundamentals sync */}
+      {(etf?.betaVsMarket != null || etf?.dividendYield != null || etf?.netExpenseRatio != null) && (
+        <div className="card">
+          <h3 className="card-header">Risk & Income</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+            {/* Beta */}
+            {etf?.betaVsMarket != null && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="text-sm text-gray-500 mb-1">Beta vs Market</div>
+                <div className={`text-2xl font-bold ${betaColor(etf.betaVsMarket)}`}>
+                  {etf.betaVsMarket.toFixed(2)}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">{betaLabel(etf.betaVsMarket)}</div>
+              </div>
+            )}
+
+            {/* Dividend Yield */}
             {etf?.dividendYield != null && (
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="text-sm text-gray-500 mb-1">Dividend Yield</div>
@@ -641,6 +563,8 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
                 <div className="text-xs text-gray-400 mt-1">Annual distribution</div>
               </div>
             )}
+
+            {/* Expense Ratio */}
             {etf?.netExpenseRatio != null && (
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="text-sm text-gray-500 mb-1">Expense Ratio</div>
@@ -650,21 +574,29 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
                 <div className="text-xs text-gray-400 mt-1">Annual cost</div>
               </div>
             )}
-            {etf?.betaVsMarket != null && (
+
+            {/* AUM */}
+            {etf?.aum != null && (
               <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="text-sm text-gray-500 mb-1">Beta (EODHD)</div>
-                <div className={`text-2xl font-bold ${betaColor(etf.betaVsMarket)}`}>
-                  {etf.betaVsMarket.toFixed(2)}
+                <div className="text-sm text-gray-500 mb-1">AUM</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {etf.aum >= 1e9
+                    ? `$${(etf.aum / 1e9).toFixed(1)}B`
+                    : `$${(etf.aum / 1e6).toFixed(0)}M`}
                 </div>
-                <div className="text-xs text-gray-400 mt-1">From fundamentals data</div>
+                <div className="text-xs text-gray-400 mt-1">Assets under management</div>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Technical Indicators */}
+      {/* Technical Indicators — only show if snapshot data exists */}
       {metrics.technicals && (
+        metrics.technicals.ma50 != null ||
+        metrics.technicals.ma200 != null ||
+        metrics.technicals.hi52w != null
+      ) && (
         <div className="card">
           <h3 className="card-header">Technical Indicators</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
