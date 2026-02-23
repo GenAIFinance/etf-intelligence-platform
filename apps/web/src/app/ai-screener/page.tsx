@@ -45,6 +45,7 @@ interface ScreenerResult {
   sharpeRatio: number | null;
   annualized3Y: number | null;
   annualized5Y: number | null;
+  dividendYield: number | null;
   aum: number | null;
   assetClass: string | null;
   contributors: MetricContributor[];
@@ -195,6 +196,12 @@ function ResultCard({ item, rank }: { item: ScreenerResult; rank: number }) {
               <span className="text-gray-500">AUM</span>
               <span className="font-medium text-gray-700">{fmt(item.aum, 'aum')}</span>
             </div>
+            {item.dividendYield !== null && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">Dividend Yield</span>
+                <span className="font-medium text-emerald-600">{fmt(item.dividendYield, 'pct2')}</span>
+              </div>
+            )}
             {item.assetClass && (
               <div className="flex justify-between col-span-2">
                 <span className="text-gray-500">Asset Class</span>
