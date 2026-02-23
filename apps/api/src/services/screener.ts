@@ -69,8 +69,34 @@ export interface ScreenerResponse {
 }
 
 // ============================================================================
-// WEIGHT PROFILES — extracted from diagnostic package
+// WEIGHT PROFILES
 // objective × riskProfile → metric weights (must sum to 1.0)
+//
+// Design rationale:
+//
+// GROWTH
+//   low    Expense 25%, Sharpe 25%, 5Y 20%, Vol 15%, DD 15%
+//          Cost-efficient indexing wins long-term; Sharpe filters out levered ETFs
+//   medium 5Y 30%, Sharpe 25%, Expense 15%, Vol 15%, DD 15%
+//          Returns-led with efficiency check; balanced retail growth investor
+//   high   5Y 35%, 3Y 20%, Sharpe 20%, Vol 15%, DD 10%
+//          Bull market momentum capture; aggressive investors anchor to return numbers
+//
+// INCOME
+//   low    Vol 30%, DD 25%, Yield 20%, Expense 15%, Sharpe 10%
+//          "Protect the principal, harvest the dividend" — loss aversion dominant
+//   medium Sharpe 25%, Yield 20%, Expense 20%, Vol 20%, DD 15%
+//          Balanced income: efficiency + yield + stability
+//   high   3Y 30%, Yield 25%, Sharpe 20%, Expense 15%, DD 10%
+//          Higher-yielding assets accepted; return + income combination
+//
+// PRESERVATION
+//   low    Vol 40%, DD 30%, Expense 20%, Sharpe 10%
+//          Absolute stability; 4 metrics only, heavily risk-weighted
+//   medium DD 35%, Vol 25%, Expense 20%, Sharpe 10%, 3Y 10%
+//          All-weather: drawdown-first, modest return floor
+//   high   Sharpe 30%, DD 25%, Vol 20%, Expense 15%, 3Y 10%
+//          Risk-adjusted return as primary filter for hedged/defensive funds
 // ============================================================================
 
 const WEIGHTS: Record<Objective, Record<RiskProfile, Partial<Record<string, number>>>> = {
@@ -199,6 +225,25 @@ function metricLabel(key: string): string {
   return labels[key] ?? key;
 }
 
+// Rationale sentences surfaced to the user in diagnosisSummary — mirrors WEIGHTS design intent
+const WEIGHT_RATIONALE: Record<Objective, Record<RiskProfile, string>> = {
+  growth: {
+    low:    'Scoring prioritizes cost-efficient funds with strong risk-adjusted returns — expense ratio and Sharpe lead, ensuring you're not paying for volatility.',
+    medium: 'Scoring is returns-led: 5Y compounding anchors the ranking, with Sharpe as an efficiency check against levered or high-fee funds.',
+    high:   'Scoring captures bull-market momentum — 5Y and 3Y returns dominate, with Sharpe as a sanity check on return quality.',
+  },
+  income: {
+    low:    'Scoring protects the principal first, then harvests yield — volatility and drawdown outweigh income metrics for loss-averse investors.',
+    medium: 'Scoring balances efficiency, yield, and stability equally — Sharpe, dividend yield, and expense ratio carry similar weight.',
+    high:   'Scoring accepts higher-yielding assets — 3Y return and dividend yield dominate, allowing more aggressive income-generating ETFs.',
+  },
+  preservation: {
+    low:    'Scoring is weighted almost entirely on risk control — volatility and drawdown account for 70% of the score, expense ratio for 20%.',
+    medium: 'Scoring is drawdown-first with a modest return floor — max drawdown leads at 35%, with a 10% weight on 3Y return to avoid return-free funds.',
+    high:   'Scoring uses risk-adjusted return as the primary filter — Sharpe leads at 30%, ensuring defensive funds still deliver efficiency.',
+  },
+};
+
 function buildSummary(objective: Objective, riskProfile: RiskProfile, constraints: ScreenerConstraints, count: number): string {
   const goalLabel = { growth: 'capital growth', income: 'income generation', preservation: 'capital preservation' }[objective];
   const riskLabel = {
@@ -215,6 +260,7 @@ function buildSummary(objective: Objective, riskProfile: RiskProfile, constraint
   if (constraints.minReturn5Y) summary += ` Minimum 5Y return of ${(constraints.minReturn5Y * 100).toFixed(0)}%.`;
   if (constraints.maxVolatility) summary += ` Maximum volatility of ${(constraints.maxVolatility * 100).toFixed(0)}%.`;
   if (constraints.esgPreference === 'prefer') summary += ' Prioritizing ESG-focused funds.';
+  summary += ` ${WEIGHT_RATIONALE[objective][riskProfile]}`;
   return summary.trim();
 }
 
@@ -290,6 +336,13 @@ export class ScreenerService {
 
     // Apply filters
     const filtered = flatEtfs.filter(etf => {
+      // ── Data completeness gate ─────────────────────────────────────────────
+      // Require at least 3 of 5 core metrics to be non-null.
+      // ETFs with sparse data produce unreliable scores and bloat results.
+      const coreMetrics = [etf.volatility, etf.maxDrawdown, etf.sharpeRatio, etf.annualized3Y, etf.annualized5Y];
+      const nonNullCount = coreMetrics.filter(v => v !== null).length;
+      if (nonNullCount < 3) return false;
+
       // Expense ratio filter
       if (constraints.maxExpenseRatio !== null && etf.netExpenseRatio !== null) {
         if (etf.netExpenseRatio > constraints.maxExpenseRatio) return false;
@@ -313,21 +366,21 @@ export class ScreenerService {
         const text = `${etf.name} ${etf.summary ?? ''}`.toLowerCase();
         if (text.includes('esg') || text.includes('sustainable')) return false;
       }
-      // Minimum Sharpe ratio — only filter if ETF has data (don't penalize missing data)
-      if (constraints.minSharpe !== null && etf.sharpeRatio !== null) {
-        if (etf.sharpeRatio < constraints.minSharpe) return false;
+      // Minimum Sharpe ratio — if constraint is set and ETF has no data, exclude it
+      if (constraints.minSharpe !== null) {
+        if (etf.sharpeRatio === null || etf.sharpeRatio < constraints.minSharpe) return false;
       }
       // Minimum 3Y annualized return
-      if (constraints.minReturn3Y !== null && etf.annualized3Y !== null) {
-        if (etf.annualized3Y < constraints.minReturn3Y) return false;
+      if (constraints.minReturn3Y !== null) {
+        if (etf.annualized3Y === null || etf.annualized3Y < constraints.minReturn3Y) return false;
       }
       // Minimum 5Y annualized return
-      if (constraints.minReturn5Y !== null && etf.annualized5Y !== null) {
-        if (etf.annualized5Y < constraints.minReturn5Y) return false;
+      if (constraints.minReturn5Y !== null) {
+        if (etf.annualized5Y === null || etf.annualized5Y < constraints.minReturn5Y) return false;
       }
       // Maximum volatility
-      if (constraints.maxVolatility !== null && etf.volatility !== null) {
-        if (etf.volatility > constraints.maxVolatility) return false;
+      if (constraints.maxVolatility !== null) {
+        if (etf.volatility === null || etf.volatility > constraints.maxVolatility) return false;
       }
       return true;
     });
