@@ -469,7 +469,7 @@ export default function DiagnosticScreener() {
   }
 
   function handleConstraints(c: Constraints & { raw: any }) {
-    setProfile(p => ({ ...p, constraints: { excludeSectors: c.excludeSectors, esgPreference: c.esgPreference, maxExpenseRatio: c.maxExpenseRatio, minAUM: c.minAUM } }));
+    setProfile(p => ({ ...p, constraints: { excludeSectors: c.excludeSectors, esgPreference: c.esgPreference, maxExpenseRatio: c.maxExpenseRatio, minAUM: c.minAUM, minSharpe: c.minSharpe ?? null, minReturn3Y: c.minReturn3Y ?? null, minReturn5Y: c.minReturn5Y ?? null, maxVolatility: c.maxVolatility ?? null } }));
     const summary: string[] = [];
     if (c.excludeSectors.length > 0) summary.push(`Exclude: ${c.excludeSectors.join(', ')}`);
     summary.push(`ESG: ${c.esgPreference.replace('_', ' ')}`);
@@ -725,7 +725,7 @@ export default function DiagnosticScreener() {
   function handleRestart() {
     setMessages([]);
     setStep('objective');
-    setProfile({ objective: null, riskProfile: null, constraints: { excludeSectors: [], esgPreference: 'no_preference', maxExpenseRatio: null, minAUM: null } });
+    setProfile({ objective: null, riskProfile: null, constraints: { excludeSectors: [], esgPreference: 'no_preference', maxExpenseRatio: null, minAUM: null, minSharpe: null, minReturn3Y: null, minReturn5Y: null, maxVolatility: null } });
     setResults(null);
     setCurrentPage(1);
     setTimeout(() => {
