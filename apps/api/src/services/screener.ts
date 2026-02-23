@@ -222,7 +222,7 @@ export class ScreenerService {
   async screen(req: ScreenerRequest): Promise<ScreenerResponse> {
     const { objective, riskProfile, constraints, page = 1, pageSize = 25, sortBy = 'totalScore' } = req;
 
-    // Fetch all ETFs with latest metric snapshot
+    // Fetch all ETFs
     const etfs = await prisma.etf.findMany({
       select: {
         id: true,
@@ -231,38 +231,53 @@ export class ScreenerService {
         aum: true,
         netExpenseRatio: true,
         assetClass: true,
-        category: true,
         summary: true,
-        metricSnapshots: {
-          orderBy: { asOfDate: 'desc' },
-          take: 1,
-          select: {
-            volatility: true,
-            sharpe: true,
-            maxDrawdown: true,
-            return3Y: true,
-            return5Y: true,
-          },
-        },
       },
     });
 
-    // Flatten snapshot into etf object
+    // Fetch latest metric snapshot per ETF separately (mirrors existing service pattern)
+    const snapshots = await prisma.etfMetricSnapshot.findMany({
+      where: {
+        OR: [
+          { volatility: { not: null } },
+          { sharpe: { not: null } },
+          { maxDrawdown: { not: null } },
+          { return3Y: { not: null } },
+          { return5Y: { not: null } },
+        ],
+      },
+      orderBy: { asOfDate: 'desc' },
+      select: {
+        etfId: true,
+        volatility: true,
+        sharpe: true,
+        maxDrawdown: true,
+        return3Y: true,
+        return5Y: true,
+      },
+    });
+
+    // Deduplicate — keep latest snapshot per ETF
+    const latestSnap = new Map<number, typeof snapshots[0]>();
+    for (const s of snapshots) {
+      if (!latestSnap.has(s.etfId)) latestSnap.set(s.etfId, s);
+    }
+
+    // Flatten ETF + snapshot into single object
     const flatEtfs = etfs.map(e => {
-      const snap = e.metricSnapshots[0] ?? {};
+      const snap = latestSnap.get(e.id) ?? {};
       return {
         ticker: e.ticker,
         name: e.name,
         aum: e.aum,
         netExpenseRatio: e.netExpenseRatio,
         assetClass: e.assetClass,
-        category: e.category,
         summary: e.summary,
-        volatility:   snap.volatility ?? null,
-        sharpeRatio:  snap.sharpe ?? null,
-        maxDrawdown:  snap.maxDrawdown ?? null,
-        annualized3Y: snap.return3Y ?? null,
-        annualized5Y: snap.return5Y ?? null,
+        volatility:   (snap as any).volatility ?? null,
+        sharpeRatio:  (snap as any).sharpe ?? null,
+        maxDrawdown:  (snap as any).maxDrawdown ?? null,
+        annualized3Y: (snap as any).return3Y ?? null,
+        annualized5Y: (snap as any).return5Y ?? null,
       };
     });
 
@@ -278,7 +293,7 @@ export class ScreenerService {
       }
       // Sector exclusion — keyword match in name + summary
       if (constraints.excludeSectors.length > 0) {
-        const text = `${etf.name} ${etf.summary ?? ''} ${etf.category ?? ''}`.toLowerCase();
+        const text = `${etf.name} ${etf.summary ?? ''}`.toLowerCase();
         for (const sector of constraints.excludeSectors) {
           if (text.includes(sector.toLowerCase())) return false;
         }
