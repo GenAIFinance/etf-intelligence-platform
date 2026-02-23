@@ -228,19 +228,19 @@ function metricLabel(key: string): string {
 // Rationale sentences surfaced to the user in diagnosisSummary — mirrors WEIGHTS design intent
 const WEIGHT_RATIONALE: Record<Objective, Record<RiskProfile, string>> = {
   growth: {
-    low:    'Scoring prioritizes cost-efficient funds with strong risk-adjusted returns — expense ratio and Sharpe lead, ensuring you're not paying for volatility.',
-    medium: 'Scoring is returns-led: 5Y compounding anchors the ranking, with Sharpe as an efficiency check against levered or high-fee funds.',
-    high:   'Scoring captures bull-market momentum — 5Y and 3Y returns dominate, with Sharpe as a sanity check on return quality.',
+    low:    "Scoring prioritizes cost-efficient funds with strong risk-adjusted returns — expense ratio and Sharpe lead, ensuring you are not overpaying for volatility.",
+    medium: "Scoring is returns-led: 5Y compounding anchors the ranking, with Sharpe as an efficiency check against levered or high-fee funds.",
+    high:   "Scoring captures bull-market momentum — 5Y and 3Y returns dominate, with Sharpe as a sanity check on return quality.",
   },
   income: {
-    low:    'Scoring protects the principal first, then harvests yield — volatility and drawdown outweigh income metrics for loss-averse investors.',
-    medium: 'Scoring balances efficiency, yield, and stability equally — Sharpe, dividend yield, and expense ratio carry similar weight.',
-    high:   'Scoring accepts higher-yielding assets — 3Y return and dividend yield dominate, allowing more aggressive income-generating ETFs.',
+    low:    "Scoring protects the principal first, then harvests yield — volatility and drawdown outweigh income metrics for loss-averse investors.",
+    medium: "Scoring balances efficiency, yield, and stability equally — Sharpe, dividend yield, and expense ratio carry similar weight.",
+    high:   "Scoring accepts higher-yielding assets — 3Y return and dividend yield dominate, allowing more aggressive income-generating ETFs.",
   },
   preservation: {
-    low:    'Scoring is weighted almost entirely on risk control — volatility and drawdown account for 70% of the score, expense ratio for 20%.',
-    medium: 'Scoring is drawdown-first with a modest return floor — max drawdown leads at 35%, with a 10% weight on 3Y return to avoid return-free funds.',
-    high:   'Scoring uses risk-adjusted return as the primary filter — Sharpe leads at 30%, ensuring defensive funds still deliver efficiency.',
+    low:    "Scoring is weighted almost entirely on risk control — volatility and drawdown account for 70% of the score, expense ratio for 20%.",
+    medium: "Scoring is drawdown-first with a modest return floor — max drawdown leads at 35%, with a 10% weight on 3Y return to avoid return-free funds.",
+    high:   "Scoring uses risk-adjusted return as the primary filter — Sharpe leads at 30%, ensuring defensive funds still deliver efficiency.",
   },
 };
 
