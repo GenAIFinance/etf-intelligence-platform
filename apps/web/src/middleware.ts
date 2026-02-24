@@ -5,21 +5,12 @@
 // Cookie stores "username:sessionId" — not the password itself.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { COOKIE_NAME, parseSessionCookie } from './lib/auth';
 
-export const COOKIE_NAME = 'etf_session';
-const LOGIN_PATH         = '/login';
+const LOGIN_PATH   = '/login';
 
 // Routes that bypass the gate
 const PUBLIC_PATHS = [LOGIN_PATH, '/api/auth/login', '/api/auth/heartbeat', '/api/auth/logout'];
-
-/** Parse cookie value → { username, sessionId } | null */
-export function parseSessionCookie(value: string | undefined): { username: string; sessionId: string } | null {
-  if (!value) return null;
-  const [username, sessionId] = value.split(':');
-  if (!username || !sessionId) return null;
-  if (username !== 'user1' && username !== 'user2') return null;
-  return { username, sessionId };
-}
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

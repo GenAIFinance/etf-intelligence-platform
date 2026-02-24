@@ -5,7 +5,7 @@
 // Silent — never returns an error that would surface to the user.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { parseSessionCookie, COOKIE_NAME } from '../../../../middleware';
+import { parseSessionCookie, COOKIE_NAME } from '../../../../lib/auth';
 
 export async function POST(request: NextRequest) {
   const cookieValue = request.cookies.get(COOKIE_NAME)?.value;

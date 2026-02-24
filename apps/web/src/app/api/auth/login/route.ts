@@ -5,9 +5,7 @@
 // GET  — check if current cookie is valid (used by login page on mount)
 
 import { NextRequest, NextResponse } from 'next/server';
-import { parseSessionCookie, COOKIE_NAME } from '../../../../middleware';
-
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+import { parseSessionCookie, COOKIE_NAME, COOKIE_MAX_AGE } from '../../../../lib/auth';
 
 // ── Supabase REST helpers ────────────────────────────────────────────────────
 // Uses the service-role key (server-side only — never expose to browser).
