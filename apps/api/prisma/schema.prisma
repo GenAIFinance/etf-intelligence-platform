@@ -75,6 +75,7 @@ model Etf {
 
   dividendYield Float?               // Annual dividend yield % (from EODHD ETF_Data.Yield)
   betaVsMarket  Float?               // Beta vs S&P 500 (from EODHD Technicals.Beta)
+  fundFamily    String?              // Issuer / fund family (from EODHD ETF_Data.Fund_Family)
 
   // ========================================================================
   // RELATIONSHIPS
@@ -97,6 +98,7 @@ model Etf {
   @@index([aum])
   @@index([inceptionDate])
   @@index([netExpenseRatio])
+  @@index([fundFamily])
 }
 
 // ============================================================================
@@ -190,6 +192,7 @@ model EtfMetricSnapshot {
   hi52w               Float?   // 52-week high
   lo52w               Float?   // 52-week low
   latestPrice         Float?   // Most recent close price
+  avgVolume30d        Float?   // Average daily volume over last 30 trading days
 
   etf Etf @relation(fields: [etfId], references: [id], onDelete: Cascade)
 
