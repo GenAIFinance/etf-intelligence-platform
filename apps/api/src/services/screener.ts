@@ -133,6 +133,43 @@ const NORM_RANGES: Record<string, [number, number, boolean]> = {
 };
 
 // ============================================================================
+// PRE-FILTER CONSTANTS
+// ============================================================================
+
+// Issuer tier list — based on AUM, institutional recognition, and product breadth.
+// Only Tier 1 and Tier 2 issuers pass the pre-filter.
+// Source: manually curated; update as needed when new major issuers emerge.
+const TIER1_ISSUERS = new Set([
+  'vanguard',
+  'blackrock',       // iShares
+  'state street',    // SPDR
+  'invesco',
+  'charles schwab',
+  'schwab',
+  'fidelity',
+  'first trust',
+]);
+
+const TIER2_ISSUERS = new Set([
+  'wisdomtree',
+  'vaneck',
+  'proshares',
+  'pimco',
+  'jpmorgan',
+  'goldman sachs',
+  'ark',
+  'dimensional',
+  'american century',
+  'northern trust',
+  'pacer',
+  'direxion',
+  'flexshares',
+]);
+
+// Minimum average daily volume (shares) — filters illiquid ETFs
+const ADV_MIN = 100_000;
+
+// ============================================================================
 // METRIC TOOLTIPS
 // ============================================================================
 
@@ -284,6 +321,7 @@ export class ScreenerService {
         assetClass: true,
         summary: true,
         dividendYield: true,
+        fundFamily: true,
       },
     });
 
@@ -306,6 +344,7 @@ export class ScreenerService {
         maxDrawdown: true,
         return3Y: true,
         return5Y: true,
+        avgVolume30d: true,
       },
     });
 
@@ -325,17 +364,36 @@ export class ScreenerService {
         netExpenseRatio: e.netExpenseRatio,
         assetClass: e.assetClass,
         summary: e.summary,
-        dividendYield: e.dividendYield ?? null,
-        volatility:   (snap as any).volatility ?? null,
-        sharpeRatio:  (snap as any).sharpe ?? null,
-        maxDrawdown:  (snap as any).maxDrawdown ?? null,
-        annualized3Y: (snap as any).return3Y ?? null,
-        annualized5Y: (snap as any).return5Y ?? null,
+        dividendYield:  e.dividendYield ?? null,
+        fundFamily:     e.fundFamily ?? null,
+        volatility:     (snap as any).volatility ?? null,
+        sharpeRatio:    (snap as any).sharpe ?? null,
+        maxDrawdown:    (snap as any).maxDrawdown ?? null,
+        annualized3Y:   (snap as any).return3Y ?? null,
+        annualized5Y:   (snap as any).return5Y ?? null,
+        avgVolume30d:   (snap as any).avgVolume30d ?? null,
       };
     });
 
     // Apply filters
     const filtered = flatEtfs.filter(etf => {
+      // ── Pre-filters (hardcoded, always apply) ────────────────────────────
+      // 1. AUM > $100M: excludes illiquid, thinly-traded, and shutting-down funds
+      if ((etf.aum ?? 0) < 1e8) return false;
+
+      // 2. ADV > 100,000 shares/day: ensures meaningful secondary market liquidity.
+      //    Null = excluded (strict mode — data absence treated as failure).
+      if (etf.avgVolume30d === null || etf.avgVolume30d < ADV_MIN) return false;
+
+      // 3. Issuer tier: only Tier 1 or Tier 2 fund families qualify.
+      //    Normalise to lowercase for case-insensitive matching.
+      //    Null fundFamily = excluded (strict mode).
+      if (!etf.fundFamily) return false;
+      const familyLower = etf.fundFamily.toLowerCase();
+      const isTier1 = [...TIER1_ISSUERS].some(t => familyLower.includes(t));
+      const isTier2 = [...TIER2_ISSUERS].some(t => familyLower.includes(t));
+      if (!isTier1 && !isTier2) return false;
+
       // ── Data completeness gate ─────────────────────────────────────────────
       // Require at least 3 of 5 core metrics to be non-null.
       // ETFs with sparse data produce unreliable scores and bloat results.
