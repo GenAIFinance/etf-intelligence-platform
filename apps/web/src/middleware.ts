@@ -1,68 +1,59 @@
+// middleware.ts → apps/web/src/middleware.ts
+//
+// Password gate for personal-use EODHD compliance.
+// Supports two named users (user1 / user2) with separate passwords.
+// Cookie stores "username:sessionId" — not the password itself.
+
 import { NextRequest, NextResponse } from 'next/server';
 
-// ─── User credentials ───────────────────────────────────────────────
-// Add up to 3 users here (username:password pairs)
-// These are loaded from env vars for security. Format: "user1:pass1,user2:pass2"
-// OR you can hardcode them below as a fallback.
-function getAuthorizedUsers(): Record<string, string> {
-  const envUsers = process.env.AUTH_USERS;
-  if (envUsers) {
-    const users: Record<string, string> = {};
-    envUsers.split(',').forEach((pair) => {
-      const [username, ...passParts] = pair.trim().split(':');
-      const password = passParts.join(':'); // handle passwords with colons
-      if (username && password) users[username] = password;
-    });
-    return users;
-  }
+export const COOKIE_NAME = 'etf_session';
+const LOGIN_PATH         = '/login';
 
-  // Fallback: hardcoded users (only used if AUTH_USERS env var not set)
-  // CHANGE THESE before deploying!
-  return {
-    admin: process.env.AUTH_PASSWORD || 'etf2026!',
-  };
+// Routes that bypass the gate
+const PUBLIC_PATHS = [LOGIN_PATH, '/api/auth/login', '/api/auth/heartbeat', '/api/auth/logout'];
+
+/** Parse cookie value → { username, sessionId } | null */
+export function parseSessionCookie(value: string | undefined): { username: string; sessionId: string } | null {
+  if (!value) return null;
+  const [username, sessionId] = value.split(':');
+  if (!username || !sessionId) return null;
+  if (username !== 'user1' && username !== 'user2') return null;
+  return { username, sessionId };
 }
 
-// ─── Auth checker ────────────────────────────────────────────────────
-function isAuthenticated(request: NextRequest): boolean {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader || !authHeader.startsWith('Basic ')) return false;
-
-  const base64 = authHeader.slice(6);
-  const decoded = Buffer.from(base64, 'base64').toString('utf-8');
-  const colonIndex = decoded.indexOf(':');
-  if (colonIndex === -1) return false;
-
-  const username = decoded.slice(0, colonIndex);
-  const password = decoded.slice(colonIndex + 1);
-
-  const authorizedUsers = getAuthorizedUsers();
-  return authorizedUsers[username] === password;
-}
-
-// ─── Middleware ───────────────────────────────────────────────────────
 export function middleware(request: NextRequest) {
-  // Skip auth for static assets and Next.js internals
   const { pathname } = request.nextUrl;
-  if (
-    pathname.startsWith('/_next/') ||
-    pathname.startsWith('/favicon.ico') ||
-    pathname.startsWith('/robots.txt')
-  ) {
+
+  // Always allow public paths
+  if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  if (isAuthenticated(request)) {
+  // Allow Next.js internals
+  if (pathname.startsWith('/_next') || pathname === '/favicon.ico') {
     return NextResponse.next();
   }
 
-  // Return 401 with WWW-Authenticate header → triggers browser login dialog
-  return new NextResponse('Authentication required', {
-    status: 401,
-    headers: {
-      'WWW-Authenticate': 'Basic realm="ETF Intelligence Platform", charset="UTF-8"',
-    },
-  });
+  const cookieValue = request.cookies.get(COOKIE_NAME)?.value;
+  const session     = parseSessionCookie(cookieValue);
+
+  // Fail open in dev if no passwords configured, fail closed in prod
+  if (!process.env.USER1_PASSWORD || !process.env.USER2_PASSWORD) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[middleware] USER1_PASSWORD / USER2_PASSWORD not set — blocking access');
+      return NextResponse.redirect(new URL(LOGIN_PATH, request.url));
+    }
+    return NextResponse.next();
+  }
+
+  if (session) {
+    return NextResponse.next();
+  }
+
+  // Not authenticated — redirect to login preserving destination
+  const loginUrl = new URL(LOGIN_PATH, request.url);
+  loginUrl.searchParams.set('redirect', pathname);
+  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {
