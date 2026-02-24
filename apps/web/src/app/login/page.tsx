@@ -5,12 +5,16 @@
 // Password gate UI — matches platform design system (teal/emerald, Tailwind).
 // On success: sets auth cookie via /api/auth/login, redirects to destination.
 // On failure: shows inline error, no lockout (private use, 1-2 known users).
+//
+// useSearchParams() must be wrapped in <Suspense> in Next.js 14+.
+// LoginForm reads the param; LoginPage is the static shell with the boundary.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Lock, Eye, EyeOff, TrendingUp } from 'lucide-react';
 
-export default function LoginPage() {
+// ── Inner component — uses useSearchParams, must be inside <Suspense> ────────
+function LoginForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const redirect     = searchParams.get('redirect') || '/';
@@ -124,5 +128,18 @@ export default function LoginPage() {
         Private research tool. Data sourced from EODHD for personal use only.
       </p>
     </div>
+  );
+}
+
+// ── Outer shell — static, provides Suspense boundary for useSearchParams ─────
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }
