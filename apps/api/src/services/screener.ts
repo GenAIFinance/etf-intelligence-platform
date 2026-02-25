@@ -141,8 +141,9 @@ const NORM_RANGES: Record<string, [number, number, boolean]> = {
 // Source: manually curated; update as needed when new major issuers emerge.
 const TIER1_ISSUERS = new Set([
   'vanguard',
-  'blackrock',       // iShares
-  'state street',    // SPDR
+  'blackrock',       // BlackRock Fund Advisors
+  'ishares',         // iShares (EODHD returns "iShares" not "BlackRock")
+  'state street',    // SPDR / State Street Investment Management
   'invesco',
   'charles schwab',
   'schwab',
@@ -164,6 +165,9 @@ const TIER2_ISSUERS = new Set([
   'pacer',
   'direxion',
   'flexshares',
+  'global x',          // Global X Funds — Mirae Asset subsidiary, widely traded
+  'franklin templeton', // Franklin Templeton Investments — major institution
+  'pgim',              // PGIM — Prudential Financial's investment arm
 ]);
 
 // Minimum average daily volume (shares) — filters illiquid ETFs
@@ -382,17 +386,19 @@ export class ScreenerService {
       if ((etf.aum ?? 0) < 1e8) return false;
 
       // 2. ADV > 100,000 shares/day: ensures meaningful secondary market liquidity.
-      //    Null = excluded (strict mode — data absence treated as failure).
-      if (etf.avgVolume30d === null || etf.avgVolume30d < ADV_MIN) return false;
+      //    Null = pass through (data may not be populated yet — don't block all results).
+      //    Once avgVolume30d is confirmed populated in DB, change null check to: return false.
+      if (etf.avgVolume30d !== null && etf.avgVolume30d < ADV_MIN) return false;
 
       // 3. Issuer tier: only Tier 1 or Tier 2 fund families qualify.
-      //    Normalise to lowercase for case-insensitive matching.
-      //    Null fundFamily = excluded (strict mode).
-      if (!etf.fundFamily) return false;
-      const familyLower = etf.fundFamily.toLowerCase();
-      const isTier1 = [...TIER1_ISSUERS].some(t => familyLower.includes(t));
-      const isTier2 = [...TIER2_ISSUERS].some(t => familyLower.includes(t));
-      if (!isTier1 && !isTier2) return false;
+      //    Null = pass through (data may not be populated yet — don't block all results).
+      //    Once fundFamily is confirmed populated in DB, change null check to: return false.
+      if (etf.fundFamily) {
+        const familyLower = etf.fundFamily.toLowerCase();
+        const isTier1 = [...TIER1_ISSUERS].some(t => familyLower.includes(t));
+        const isTier2 = [...TIER2_ISSUERS].some(t => familyLower.includes(t));
+        if (!isTier1 && !isTier2) return false;
+      }
 
       // ── Data completeness gate ─────────────────────────────────────────────
       // Require at least 3 of 5 core metrics to be non-null.
