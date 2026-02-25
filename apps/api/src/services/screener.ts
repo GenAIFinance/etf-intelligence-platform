@@ -386,9 +386,8 @@ export class ScreenerService {
       if ((etf.aum ?? 0) < 1e8) return false;
 
       // 2. ADV > 100,000 shares/day: ensures meaningful secondary market liquidity.
-      //    Null = pass through (data may not be populated yet — don't block all results).
-      //    Once avgVolume30d is confirmed populated in DB, change null check to: return false.
-      if (etf.avgVolume30d !== null && etf.avgVolume30d < ADV_MIN) return false;
+      //    Strict — null = excluded. Coverage confirmed at 5,222 snapshots (Feb 2026).
+      if (etf.avgVolume30d === null || etf.avgVolume30d < ADV_MIN) return false;
 
       // 3. Issuer tier: only Tier 1 or Tier 2 fund families qualify.
       //    Null = pass through (data may not be populated yet — don't block all results).
