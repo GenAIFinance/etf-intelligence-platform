@@ -329,17 +329,11 @@ export class ScreenerService {
       },
     });
 
-    // Fetch latest metric snapshot per ETF separately (mirrors existing service pattern)
+    // Fetch all snapshots per ETF — no WHERE filter.
+    // avgVolume30d and risk metrics (volatility, sharpe etc.) are written in
+    // separate sync runs and may land on different snapshot rows.
+    // We merge all rows per ETF, taking the most recent non-null value for each field.
     const snapshots = await prisma.etfMetricSnapshot.findMany({
-      where: {
-        OR: [
-          { volatility: { not: null } },
-          { sharpe: { not: null } },
-          { maxDrawdown: { not: null } },
-          { return3Y: { not: null } },
-          { return5Y: { not: null } },
-        ],
-      },
       orderBy: { asOfDate: 'desc' },
       select: {
         etfId: true,
@@ -352,15 +346,42 @@ export class ScreenerService {
       },
     });
 
-    // Deduplicate — keep latest snapshot per ETF
-    const latestSnap = new Map<number, typeof snapshots[0]>();
+    // Merge all snapshots per ETF — take most recent non-null value per field.
+    // This handles the case where volume and risk metrics are on different rows.
+    type SnapFields = {
+      volatility: number | null;
+      sharpe: number | null;
+      maxDrawdown: number | null;
+      return3Y: number | null;
+      return5Y: number | null;
+      avgVolume30d: number | null;
+    };
+    const latestSnap = new Map<number, SnapFields>();
     for (const s of snapshots) {
-      if (!latestSnap.has(s.etfId)) latestSnap.set(s.etfId, s);
+      const existing = latestSnap.get(s.etfId);
+      if (!existing) {
+        latestSnap.set(s.etfId, {
+          volatility:   s.volatility   ?? null,
+          sharpe:       s.sharpe       ?? null,
+          maxDrawdown:  s.maxDrawdown  ?? null,
+          return3Y:     s.return3Y     ?? null,
+          return5Y:     s.return5Y     ?? null,
+          avgVolume30d: s.avgVolume30d ?? null,
+        });
+      } else {
+        // Already have a row — fill in any nulls with values from older rows
+        if (existing.volatility   === null) existing.volatility   = s.volatility   ?? null;
+        if (existing.sharpe       === null) existing.sharpe       = s.sharpe       ?? null;
+        if (existing.maxDrawdown  === null) existing.maxDrawdown  = s.maxDrawdown  ?? null;
+        if (existing.return3Y     === null) existing.return3Y     = s.return3Y     ?? null;
+        if (existing.return5Y     === null) existing.return5Y     = s.return5Y     ?? null;
+        if (existing.avgVolume30d === null) existing.avgVolume30d = s.avgVolume30d ?? null;
+      }
     }
 
-    // Flatten ETF + snapshot into single object
+    // Flatten ETF + merged snapshot into single object
     const flatEtfs = etfs.map(e => {
-      const snap = latestSnap.get(e.id) ?? {};
+      const snap = latestSnap.get(e.id);
       return {
         ticker: e.ticker,
         name: e.name,
@@ -368,14 +389,14 @@ export class ScreenerService {
         netExpenseRatio: e.netExpenseRatio,
         assetClass: e.assetClass,
         summary: e.summary,
-        dividendYield:  e.dividendYield ?? null,
-        fundFamily:     e.fundFamily ?? null,
-        volatility:     (snap as any).volatility ?? null,
-        sharpeRatio:    (snap as any).sharpe ?? null,
-        maxDrawdown:    (snap as any).maxDrawdown ?? null,
-        annualized3Y:   (snap as any).return3Y ?? null,
-        annualized5Y:   (snap as any).return5Y ?? null,
-        avgVolume30d:   (snap as any).avgVolume30d ?? null,
+        dividendYield:  e.dividendYield  ?? null,
+        fundFamily:     e.fundFamily     ?? null,
+        volatility:     snap?.volatility   ?? null,
+        sharpeRatio:    snap?.sharpe       ?? null,
+        maxDrawdown:    snap?.maxDrawdown  ?? null,
+        annualized3Y:   snap?.return3Y     ?? null,
+        annualized5Y:   snap?.return5Y     ?? null,
+        avgVolume30d:   snap?.avgVolume30d ?? null,
       };
     });
 
