@@ -412,12 +412,16 @@ export async function etfRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: 'ETF not found' });
       }
 
-      const metrics = await prisma.etfMetricSnapshot.findFirst({
+      // Fetch all snapshots ordered newest first — technicals sync creates
+      // null-metric rows that would shadow older rows with real data if we
+      // just did findFirst. Merge across rows, taking the most recent non-null
+      // value for each field.
+      const allSnapshots = await prisma.etfMetricSnapshot.findMany({
         where: { etfId: etf.id },
         orderBy: { asOfDate: 'desc' },
       });
 
-      if (!metrics) {
+      if (allSnapshots.length === 0) {
         return {
           ticker,
           asOfDate: new Date().toISOString(),
@@ -427,26 +431,74 @@ export async function etfRoutes(fastify: FastifyInstance) {
         };
       }
 
-      const trailingReturns = JSON.parse(metrics.trailingReturnsJson || '{}');
+      // Merge: first non-null value per field wins (newest row first)
+      let trailingReturnsJson = '{}';
+      let asOfDate            = allSnapshots[0].asOfDate;
+      let volatility          = null as number | null;
+      let sharpe              = null as number | null;
+      let maxDrawdown         = null as number | null;
+      let beta                = null as number | null;
+      let latestPrice         = null as number | null;
+      let rsi14               = null as number | null;
+      let ma20                = null as number | null;
+      let ma50                = null as number | null;
+      let ma200               = null as number | null;
+      let hi52w               = null as number | null;
+      let lo52w               = null as number | null;
+      let return1Y            = null as number | null;
+      let return3Y            = null as number | null;
+      let return5Y            = null as number | null;
+      let returnYTD           = null as number | null;
+
+      for (const s of allSnapshots) {
+        if (volatility   === null) volatility   = s.volatility   ?? null;
+        if (sharpe       === null) sharpe       = s.sharpe       ?? null;
+        if (maxDrawdown  === null) maxDrawdown  = s.maxDrawdown  ?? null;
+        if (beta         === null) beta         = s.beta         ?? null;
+        if (latestPrice  === null) latestPrice  = s.latestPrice  ?? null;
+        if (rsi14        === null) rsi14        = s.rsi14        ?? null;
+        if (ma20         === null) ma20         = s.ma20         ?? null;
+        if (ma50         === null) ma50         = s.ma50         ?? null;
+        if (ma200        === null) ma200        = s.ma200        ?? null;
+        if (hi52w        === null) hi52w        = s.hi52w        ?? null;
+        if (lo52w        === null) lo52w        = s.lo52w        ?? null;
+        if (return1Y     === null) return1Y     = s.return1Y     ?? null;
+        if (return3Y     === null) return3Y     = s.return3Y     ?? null;
+        if (return5Y     === null) return5Y     = s.return5Y     ?? null;
+        if (returnYTD    === null) returnYTD    = s.returnYTD    ?? null;
+        // Use trailingReturnsJson from most recent row that has it
+        if (trailingReturnsJson === '{}' && s.trailingReturnsJson && s.trailingReturnsJson !== '{}') {
+          trailingReturnsJson = s.trailingReturnsJson;
+        }
+      }
+
+      const trailingReturns = {
+        ...JSON.parse(trailingReturnsJson),
+        // Also expose individual return fields for the Performance tab
+        '1Y':  return1Y,
+        '3Y':  return3Y,
+        '5Y':  return5Y,
+        'YTD': returnYTD,
+      };
 
       return {
         ticker,
-        asOfDate: metrics.asOfDate.toISOString(),
+        asOfDate: asOfDate.toISOString(),
         trailingReturns,
         riskMetrics: {
-          volatility: metrics.volatility,
-          sharpe: metrics.sharpe,
-          maxDrawdown: metrics.maxDrawdown,
-          beta: metrics.beta,
+          volatility,
+          sharpe,
+          maxDrawdown,
+          beta,
         },
         technicals: {
-          latestPrice: metrics.latestPrice,
-          rsi14: metrics.rsi14,
-          ma20: metrics.ma20,
-          ma50: metrics.ma50,
-          ma200: metrics.ma200,
-          hi52w: metrics.hi52w,
-          lo52w: metrics.lo52w,
+          latestPrice,
+          rsi14,
+          ma20,
+          ma50,
+          ma200,
+          hi52w,
+          lo52w,
         },
       };
     } catch (error: any) {
