@@ -255,7 +255,7 @@ function ResultsPanel({
   const canCompare = selectedTickers.size >= 2 && selectedTickers.size <= 15;
 
   function handleCompare() {
-    const tickers = [...selectedTickers].join(',');
+    const tickers = Array.from(selectedTickers).join(',');
     router.push(`/compare?tickers=${tickers}`);
   }
 
