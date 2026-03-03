@@ -18,7 +18,7 @@ export async function etfComparisonRoutes(app: FastifyInstance) {
       });
     }
 
-    if (tickers.length < 2 || tickers.length > 4) {
+    if (tickers.length < 2 || tickers.length > 15) {
       return reply.status(400).send({ 
         error: 'Invalid ticker count', 
         message: 'Please provide 2-4 ETF tickers for comparison' 
