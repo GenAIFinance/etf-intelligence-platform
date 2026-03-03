@@ -3,8 +3,9 @@
 
 'use client';
 
-import { useState } from 'react';
-import { Search, X, ArrowRight, TrendingUp, DollarSign, BarChart3, Sparkles, Download, CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Search, X, TrendingUp, DollarSign, BarChart3, Sparkles, CheckCircle2, AlertCircle, Info, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -48,14 +49,43 @@ interface ComparisonResponse {
   asOfDate: string;
 }
 
-export default function ComparePage() {
+interface MetricsData {
+  return1Y:    number | null;
+  return3Y:    number | null;
+  return5Y:    number | null;
+  returnYTD:   number | null;
+  volatility:  number | null;
+  sharpe:      number | null;
+  maxDrawdown: number | null;
+  beta:        number | null;
+}
+
+// ── Inner component — uses useSearchParams ───────────────────────────────────
+function ComparePageInner() {
+  const searchParams = useSearchParams();
   const [tickers, setTickers] = useState<string[]>(['', '']);
   const [comparison, setComparison] = useState<ComparisonResponse | null>(null);
+  const [metricsMap, setMetricsMap] = useState<Record<string, MetricsData>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Read tickers from URL params — set by AI screener "Compare" button
+  useEffect(() => {
+    const param = searchParams.get('tickers');
+    if (param) {
+      const fromUrl = param.split(',').map(t => t.trim().toUpperCase()).filter(Boolean).slice(0, 15);
+      if (fromUrl.length >= 2) {
+        // Pad to at least 2 slots
+        const padded = [...fromUrl];
+        setTickers(padded);
+        // Auto-trigger comparison
+        setTimeout(() => triggerCompare(fromUrl), 100);
+      }
+    }
+  }, []);
+
   function addTicker() {
-    if (tickers.length < 4) {
+    if (tickers.length < 15) {
       setTickers([...tickers, '']);
     }
   }
@@ -73,64 +103,62 @@ export default function ComparePage() {
     setTickers(newTickers);
   }
 
-  async function handleCompare() {
-    const validTickers = tickers.filter(t => t.trim().length > 0);
-    
-    if (validTickers.length < 2) {
-      setError('Please enter at least 2 ETF tickers');
-      return;
-    }
-
+  async function triggerCompare(validTickers: string[]) {
     setIsLoading(true);
     setError(null);
-
     try {
-      const response = await fetch(`${API_URL}/api/etf/compare`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tickers: validTickers }),
-      });
+      // Fetch static ETF data + performance metrics in parallel
+      const [compResponse, ...metricsResponses] = await Promise.all([
+        fetch(`${API_URL}/api/etf/compare`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tickers: validTickers }),
+        }),
+        ...validTickers.map(t => fetch(`${API_URL}/api/etfs/${t}/metrics`)),
+      ]);
 
-      if (!response.ok) {
-        const errorData = await response.json();
+      if (!compResponse.ok) {
+        const errorData = await compResponse.json();
         throw new Error(errorData.message || 'Comparison failed');
       }
 
-      const data = await response.json();
-      setComparison(data);
+      const compData = await compResponse.json();
+      setComparison(compData);
+
+      // Build metricsMap from parallel metric fetches
+      const newMetrics: Record<string, MetricsData> = {};
+      for (let i = 0; i < validTickers.length; i++) {
+        try {
+          const m = await metricsResponses[i].json();
+          newMetrics[validTickers[i]] = {
+            return1Y:    m.trailingReturns?.['1Y']    ?? null,
+            return3Y:    m.trailingReturns?.['3Y']    ?? null,
+            return5Y:    m.trailingReturns?.['5Y']    ?? null,
+            returnYTD:   m.trailingReturns?.['YTD']   ?? null,
+            volatility:  m.riskMetrics?.volatility    ?? null,
+            sharpe:      m.riskMetrics?.sharpe        ?? null,
+            maxDrawdown: m.riskMetrics?.maxDrawdown   ?? null,
+            beta:        m.riskMetrics?.beta          ?? null,
+          };
+        } catch { newMetrics[validTickers[i]] = { return1Y: null, return3Y: null, return5Y: null, returnYTD: null, volatility: null, sharpe: null, maxDrawdown: null, beta: null }; }
+      }
+      setMetricsMap(newMetrics);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to compare ETFs');
-      console.error('Comparison error:', err);
     } finally {
       setIsLoading(false);
     }
   }
 
+  async function handleCompare() {
+    const validTickers = tickers.filter(t => t.trim().length > 0);
+    if (validTickers.length < 2) { setError('Please enter at least 2 ETF tickers'); return; }
+    await triggerCompare(validTickers);
+  }
+
   async function loadPopularComparison(popularTickers: string[]) {
-    const newTickers = [...popularTickers];
-    while (newTickers.length < 4) newTickers.push('');
-    setTickers(newTickers);
-    
-    setTimeout(async () => {
-      const validTickers = popularTickers.filter(t => t.trim().length > 0);
-      if (validTickers.length >= 2) {
-        setIsLoading(true);
-        setError(null);
-        try {
-          const response = await fetch(`${API_URL}/api/etf/compare`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tickers: validTickers }),
-          });
-          const data = await response.json();
-          setComparison(data);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Failed to compare ETFs');
-        } finally {
-          setIsLoading(false);
-        }
-      }
-    }, 100);
+    setTickers(popularTickers);
+    setTimeout(() => triggerCompare(popularTickers), 100);
   }
 
   function formatCurrency(value: number | null): string {
@@ -180,7 +208,7 @@ export default function ComparePage() {
             ETF Comparison Tool
           </h1>
           <p className="text-gray-600">
-            Compare 2-4 ETFs side-by-side across costs, allocations, valuations, and more
+            Compare up to 15 ETFs side-by-side across performance, risk, costs, allocations, and more
           </p>
         </div>
 
@@ -214,7 +242,7 @@ export default function ComparePage() {
 
           <div className="flex items-center justify-between">
             <div className="flex gap-2">
-              {tickers.length < 4 && (
+              {tickers.length < 15 && (
                 <button
                   onClick={addTicker}
                   className="px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-primary-500 hover:text-primary-600"
@@ -293,6 +321,103 @@ export default function ComparePage() {
                 </ul>
               </div>
             )}
+
+            {/* Performance Metrics */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-teal-600" />
+                Performance
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Metric</th>
+                      {comparison.etfs.map(etf => (
+                        <th key={etf.ticker} className="text-center py-3 px-4 text-sm font-semibold text-gray-900">{etf.ticker}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {/* Returns */}
+                    {(['1Y','3Y','5Y','YTD'] as const).map(period => {
+                      const key = period === 'YTD' ? 'returnYTD' : `return${period}` as keyof MetricsData;
+                      const vals = comparison.etfs.map(e => metricsMap[e.ticker]?.[key] as number | null ?? null);
+                      const max = Math.max(...vals.filter((v): v is number => v !== null));
+                      return (
+                        <tr key={period}>
+                          <td className="py-3 px-4 text-sm text-gray-700">{period} Return</td>
+                          {comparison.etfs.map((etf, i) => {
+                            const v = vals[i];
+                            const isBest = v !== null && v === max && vals.filter(x => x === max).length === 1;
+                            return (
+                              <td key={etf.ticker} className={`text-center py-3 px-4 text-sm font-medium ${isBest ? 'bg-teal-50 text-teal-700 font-bold' : v === null ? 'text-gray-400' : v >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                {v === null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`}{isBest ? ' ✓' : ''}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                    {/* Risk metrics */}
+                    <tr>
+                      <td className="py-3 px-4 text-sm text-gray-700">Sharpe Ratio</td>
+                      {comparison.etfs.map(etf => {
+                        const v = metricsMap[etf.ticker]?.sharpe ?? null;
+                        const vals = comparison.etfs.map(e => metricsMap[e.ticker]?.sharpe ?? null);
+                        const max = Math.max(...vals.filter((x): x is number => x !== null));
+                        const isBest = v !== null && v === max && vals.filter(x => x === max).length === 1;
+                        return (
+                          <td key={etf.ticker} className={`text-center py-3 px-4 text-sm ${isBest ? 'bg-teal-50 text-teal-700 font-bold' : 'text-gray-900'}`}>
+                            {v === null ? '—' : v.toFixed(2)}{isBest ? ' ✓' : ''}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    <tr>
+                      <td className="py-3 px-4 text-sm text-gray-700">Volatility (Ann.)</td>
+                      {comparison.etfs.map(etf => {
+                        const v = metricsMap[etf.ticker]?.volatility ?? null;
+                        const vals = comparison.etfs.map(e => metricsMap[e.ticker]?.volatility ?? null);
+                        const min = Math.min(...vals.filter((x): x is number => x !== null));
+                        const isBest = v !== null && v === min && vals.filter(x => x === min).length === 1;
+                        return (
+                          <td key={etf.ticker} className={`text-center py-3 px-4 text-sm ${isBest ? 'bg-teal-50 text-teal-700 font-bold' : 'text-gray-900'}`}>
+                            {v === null ? '—' : `${(v * 100).toFixed(1)}%`}{isBest ? ' ✓' : ''}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    <tr>
+                      <td className="py-3 px-4 text-sm text-gray-700">Max Drawdown</td>
+                      {comparison.etfs.map(etf => {
+                        const v = metricsMap[etf.ticker]?.maxDrawdown ?? null;
+                        const vals = comparison.etfs.map(e => metricsMap[e.ticker]?.maxDrawdown ?? null);
+                        // For drawdown: least negative = best (closest to 0)
+                        const best = vals.filter((x): x is number => x !== null).sort((a,b) => b - a)[0];
+                        const isBest = v !== null && v === best && vals.filter(x => x === best).length === 1;
+                        return (
+                          <td key={etf.ticker} className={`text-center py-3 px-4 text-sm ${isBest ? 'bg-teal-50 text-teal-700 font-bold' : 'text-red-500'}`}>
+                            {v === null ? '—' : `${(v * 100).toFixed(1)}%`}{isBest ? ' ✓' : ''}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    <tr>
+                      <td className="py-3 px-4 text-sm text-gray-700">Beta (vs S&P 500)</td>
+                      {comparison.etfs.map(etf => {
+                        const v = metricsMap[etf.ticker]?.beta ?? null;
+                        return (
+                          <td key={etf.ticker} className="text-center py-3 px-4 text-sm text-gray-900">
+                            {v === null ? '—' : v.toFixed(2)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
             {/* Cost Comparison */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -625,5 +750,18 @@ export default function ComparePage() {
         )}
       </div>
     </div>
+  );
+}
+
+// ── Outer shell — static, provides Suspense boundary for useSearchParams ──────
+export default function ComparePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <ComparePageInner />
+    </Suspense>
   );
 }

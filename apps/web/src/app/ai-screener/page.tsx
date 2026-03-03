@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, RefreshCw, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -101,15 +102,27 @@ function returnColor(v: number | null) {
 // RESULT CARD
 // ============================================================================
 
-function ResultCard({ item, rank }: { item: ScreenerResult; rank: number }) {
+function ResultCard({ item, rank, isSelected, onToggle }: {
+  item: ScreenerResult; rank: number;
+  isSelected: boolean; onToggle: (ticker: string) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:border-teal-300 hover:shadow-md transition-all">
+    <div className={`bg-white border rounded-xl overflow-hidden hover:shadow-md transition-all ${isSelected ? 'border-teal-400 ring-1 ring-teal-300' : 'border-gray-200 hover:border-teal-300'}`}>
       <div className="p-4">
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
+            {/* Compare checkbox */}
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggle(item.ticker)}
+              onClick={e => e.stopPropagation()}
+              className="w-4 h-4 rounded border-gray-300 text-teal-600 cursor-pointer accent-teal-600"
+              title="Select for comparison"
+            />
             <span className="w-7 h-7 flex items-center justify-center bg-teal-50 text-teal-700 text-xs font-bold rounded-lg border border-teal-100">
               {rank}
             </span>
@@ -228,23 +241,51 @@ function ResultsPanel({
   isLoading,
   onLoadMore,
   canLoadMore,
+  selectedTickers,
+  onToggleSelect,
 }: {
   results: ScreenerResponse;
   isLoading: boolean;
   onLoadMore: () => void;
   canLoadMore: boolean;
+  selectedTickers: Set<string>;
+  onToggleSelect: (ticker: string) => void;
 }) {
+  const router = useRouter();
+  const canCompare = selectedTickers.size >= 2 && selectedTickers.size <= 15;
+
+  function handleCompare() {
+    const tickers = [...selectedTickers].join(',');
+    router.push(`/compare?tickers=${tickers}`);
+  }
+
   return (
     <div className="mt-4 space-y-3">
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs text-gray-500">{results.pagination.total} ETFs matched</span>
-        <span className="text-xs text-gray-400">Page {results.pagination.page} of {results.pagination.totalPages}</span>
+        <div className="flex items-center gap-3">
+          {selectedTickers.size > 0 && (
+            <span className="text-xs text-teal-600 font-medium">{selectedTickers.size} selected</span>
+          )}
+          <button
+            onClick={handleCompare}
+            disabled={!canCompare}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors
+              disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed
+              enabled:bg-teal-600 enabled:text-white enabled:hover:bg-teal-700"
+          >
+            Compare{selectedTickers.size >= 2 ? ` (${selectedTickers.size})` : ''}
+          </button>
+          <span className="text-xs text-gray-400">Page {results.pagination.page} of {results.pagination.totalPages}</span>
+        </div>
       </div>
       {results.data.map((item, i) => (
         <ResultCard
           key={item.ticker}
           item={item}
           rank={(results.pagination.page - 1) * results.pagination.pageSize + i + 1}
+          isSelected={selectedTickers.has(item.ticker)}
+          onToggle={onToggleSelect}
         />
       ))}
 
@@ -421,6 +462,15 @@ export default function DiagnosticScreener() {
   const [results, setResults] = useState<ScreenerResponse | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
+
+  function toggleSelectTicker(ticker: string) {
+    setSelectedTickers(prev => {
+      const next = new Set(prev);
+      if (next.has(ticker)) { next.delete(ticker); } else if (next.size < 15) { next.add(ticker); }
+      return next;
+    });
+  }
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Initial message
@@ -838,6 +888,8 @@ export default function DiagnosticScreener() {
                         results.pagination.page < results.pagination.totalPages &&
                         msg.results === messages.find(m => m.results)?.results
                       }
+                      selectedTickers={selectedTickers}
+                      onToggleSelect={toggleSelectTicker}
                     />
                   )}
                 </div>
