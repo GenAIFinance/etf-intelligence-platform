@@ -1,22 +1,18 @@
 // ETF Context Service
 // apps/api/src/services/etf-context.ts
 //
-// Fetches relevant ETFs from the database based on the user's query.
-// Used by both ai-screener.ts and ai-chat.ts to inject live ETF data
-// into DeepSeek prompts so recommendations reference real tickers.
+// Uses raw SQL to avoid Prisma type errors caused by:
+//   1. `themes` column added via SQL migration but not yet in schema.prisma
+//   2. Snapshot relation name uncertainty
 //
-// ⚠️  RELATION NAME: This file uses `metricSnapshots` (from model EtfMetricSnapshot).
-//     If your Prisma schema uses a different relation name on the Etf model, update
-//     the two `include: { metricSnapshots: ... }` lines and the `e.metricSnapshots[0]`
-//     references below. Run `npx prisma studio` and check the Etf table relations to confirm.
+// TODO (non-urgent): add `themes String[] @default([])` to Etf model in
+// schema.prisma, run `npx prisma generate`, then switch back to typed queries.
 
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 // ── Theme keyword map ─────────────────────────────────────────────────────────
-// Keys must exactly match the theme strings used in your `themes` column.
-// Extend this map as you tag more ETFs in the database.
 
 const THEME_KEYWORDS: Record<string, string[]> = {
   AI:             ['ai', 'artificial intelligence', 'machine learning', 'robot'],
@@ -55,65 +51,91 @@ export interface EtfContextRow {
   expenseRatio: number | null;
 }
 
+// Raw SQL row shape returned by Postgres
+interface RawEtfRow {
+  ticker:            string;
+  name:              string;
+  themes:            string[] | null;
+  net_expense_ratio: number | null;
+  return_1_y:        number | null;
+  volatility:        number | null;
+  sharpe:            number | null;
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export async function getEtfContext(query: string): Promise<EtfContextRow[]> {
   const themes = detectThemes(query);
 
-  // 1. Theme match — most precise
+  // 1. Theme match — join Etf with latest EtfMetricSnapshot via raw SQL
   if (themes.length > 0) {
-    const etfs = await prisma.etf.findMany({
-      where: {
-        themes: { hasSome: themes },
-        aum:    { gt: 100_000_000 },        // pre-filter: AUM > $100M
-      },
-      take: 20,
-      include: {
-        metricSnapshots: {                   // ← update if your relation name differs
-          orderBy: { asOfDate: 'desc' },
-          take: 1,
-        },
-      },
-    });
+    const rows = await prisma.$queryRaw<RawEtfRow[]>`
+      SELECT
+        e.ticker,
+        e.name,
+        e.themes,
+        e."netExpenseRatio"   AS net_expense_ratio,
+        s."return3Y"          AS return_1_y,
+        s.volatility,
+        s.sharpe
+      FROM "Etf" e
+      LEFT JOIN LATERAL (
+        SELECT "return3Y", volatility, sharpe
+        FROM   "EtfMetricSnapshot"
+        WHERE  "etfId" = e.id
+        ORDER  BY "asOfDate" DESC
+        LIMIT  1
+      ) s ON true
+      WHERE e.aum > 100000000
+        AND e.themes && ${themes}::text[]
+      ORDER BY e.aum DESC
+      LIMIT 20
+    `;
 
-    if (etfs.length > 0) return formatRows(etfs);
+    if (rows.length > 0) return formatRows(rows);
   }
 
-  // 2. Fallback — keyword match on name / assetClass
-  const etfs = await prisma.etf.findMany({
-    where: {
-      OR: [
-        { name:       { contains: query, mode: 'insensitive' } },
-        { assetClass: { contains: query, mode: 'insensitive' } },
-      ],
-      aum: { gt: 100_000_000 },
-    },
-    take: 20,
-    include: {
-      metricSnapshots: {                     // ← update if your relation name differs
-        orderBy: { asOfDate: 'desc' },
-        take: 1,
-      },
-    },
-  });
+  // 2. Fallback — name / assetClass keyword match
+  const keyword = `%${query}%`;
+  const rows = await prisma.$queryRaw<RawEtfRow[]>`
+    SELECT
+      e.ticker,
+      e.name,
+      e.themes,
+      e."netExpenseRatio"   AS net_expense_ratio,
+      s."return3Y"          AS return_1_y,
+      s.volatility,
+      s.sharpe
+    FROM "Etf" e
+    LEFT JOIN LATERAL (
+      SELECT "return3Y", volatility, sharpe
+      FROM   "EtfMetricSnapshot"
+      WHERE  "etfId" = e.id
+      ORDER  BY "asOfDate" DESC
+      LIMIT  1
+    ) s ON true
+    WHERE e.aum > 100000000
+      AND (
+        e.name        ILIKE ${keyword}
+        OR e."assetClass" ILIKE ${keyword}
+      )
+    ORDER BY e.aum DESC
+    LIMIT 20
+  `;
 
-  return formatRows(etfs);
+  return formatRows(rows);
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function formatRows(etfs: any[]): EtfContextRow[] {
-  return etfs.map(e => {
-    const snap = e.metricSnapshots?.[0];    // ← update if your relation name differs
-    return {
-      ticker:       e.ticker,
-      name:         e.name,
-      themes:       e.themes ?? [],
-      return3Y:     snap?.return3Y     ?? null,
-      volatility:   snap?.volatility   ?? null,
-      sharpe:       snap?.sharpe       ?? null,
-      expenseRatio: e.netExpenseRatio  ?? null,
-    };
-  });
+function formatRows(rows: RawEtfRow[]): EtfContextRow[] {
+  return rows.map(r => ({
+    ticker:       r.ticker,
+    name:         r.name,
+    themes:       r.themes ?? [],
+    return3Y:     r.return_1_y        ?? null,
+    volatility:   r.volatility        ?? null,
+    sharpe:       r.sharpe            ?? null,
+    expenseRatio: r.net_expense_ratio ?? null,
+  }));
 }

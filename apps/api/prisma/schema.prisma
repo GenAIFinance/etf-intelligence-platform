@@ -76,6 +76,7 @@ model Etf {
   dividendYield Float?               // Annual dividend yield % (from EODHD ETF_Data.Yield)
   betaVsMarket  Float?               // Beta vs S&P 500 (from EODHD Technicals.Beta)
   fundFamily    String?              // Issuer / fund family (from EODHD ETF_Data.Fund_Family)
+  themes        String[]  @default([]) // Thematic tags e.g. ['AI','Defense'] — added via migration Mar 2026
 
   // ========================================================================
   // RELATIONSHIPS
