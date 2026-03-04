@@ -4,12 +4,58 @@ VERCEL Webpage:
 
  login password: ETFintel2026!
 
+USER1_PASSWORD: ETFintel@jin
+USER2_PASSWORD: ETFintel@qi
+
+
 ZsGv7voddMT5XTNW
+
+https://etf-intelligence-platform.vercel.app
 ----------------------------------------------
+set EODHD_API_KEY=699349cd2a5721.95386449
+set DATABASE_URL=postgresql://postgres.whryctfiroqxhqhnumke:ZsGv7voddMT5XTNW@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+
 postgresql://postgres:ZsGv7voddMT5XTNW@db.whryctfiroqxhqhnumke.supabase.co:5432/postgres
 postgresql://postgres.whryctfiroqxhqhnumke:ZsGv7voddMT5XTNW@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
 postgresql://postgres.whryctfiroqxhqhnumke:YOURNEWPASSWORD@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
-postgresql://postgres.whryctfiroqxhqhnumke:ETF_Intel_2026!@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+
+curl "https://eodhd.com/api/fundamentals/VOO.US?api_token=699349cd2a5721.95386449&fmt=json" > voo-raw.json
+curl "https://eodhd.com/api/fundamentals/VOO.US?api_token=699349cd2a5721.95386449&fmt=json" -o voo-raw.json
+
+$env:DATABASE_URL="postgresql://postgres.whryctfiroqxhqhnumke:ZsGv7voddMT5XTNW@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+
+
+-----------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------
+-- Login count per user
+SELECT username, COUNT(*) AS total_logins
+FROM user_sessions
+GROUP BY username
+ORDER BY username;
+
+
+-- Full picture — logins + time spent per user
+SELECT
+  username,
+  COUNT(*)                                                              AS total_logins,
+  MAX(logged_in_at)                                                     AS last_login,
+  ROUND(AVG(EXTRACT(EPOCH FROM (last_active_at - logged_in_at)) / 60)) AS avg_minutes_per_session,
+  ROUND(SUM(EXTRACT(EPOCH FROM (last_active_at - logged_in_at)) / 60)) AS total_minutes
+FROM user_sessions
+GROUP BY username
+ORDER BY username;
+
+-- Every session in detail, newest first
+SELECT
+  username,
+  logged_in_at,
+  last_active_at,
+  ROUND(EXTRACT(EPOCH FROM (last_active_at - logged_in_at)) / 60) AS minutes_active
+FROM user_sessions
+ORDER BY logged_in_at DESC;
+-----------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------
+
 
 
 cd "C:\Users\cathe\OneDrive\文档\Risk\Project folder\ETF Intelligence"
@@ -109,3 +155,43 @@ Portfolio Analyzer roadmap
 Feature prioritization
 Target audience insights
 Business value analysis
+
+
+
+ DATABASE_URL             │ postgresql://                                     ║
+║                          │ postgres.whryctfiroqxhqhnumke:xxxxxxxxxxxx     ║
+║                          │ @aws-1-us-east-1.pooler.supabase.com:6543/        ║
+║                          │ postgres?pgbouncer=true                           ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ DIRECT_URL               │ postgresql://postgres:xxxxxxxxxxxxxx             ║
+║                          │ @db.whryctfiroqxhqhnumke.supabase.co:5432/        ║
+║                          │ postgres                                          ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ EODHD_API_TOKEN          │ 6xxxxxxxxxxxxxxxxx                         ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ NODE_ENV                 │ production                                        ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ PORT                     │ 3001                                              ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ RAILWAY_ENVIRONMENT      │ production                                        ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ RAILWAY_ENVIRONMENT_ID   │ 8a375db2-b4bc-4a71-8814-bc6d4a483944              ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ RAILWAY_ENVIRONMENT_NAME │ production                                        ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ RAILWAY_PRIVATE_DOMAIN   │ api.railway.internal                              ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ RAILWAY_PROJECT_ID       │ c8afc112-e1df-4455-96bf-57158c0cf23c              ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ RAILWAY_PROJECT_NAME     │ etf-intelligence-api                              ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ RAILWAY_PUBLIC_DOMAIN    │ etf-intelligence.up.railway.app                   ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ RAILWAY_SERVICE_API_URL  │ etf-intelligence.up.railway.app                   ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ RAILWAY_SERVICE_ID       │ 9ab8a375-f381-491e-b16e-24e813e96836              ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ RAILWAY_SERVICE_NAME     │ api                                               ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ RAILWAY_STATIC_URL       │ etf-intelligence.up.railway.app                   ║
+╚══════════════════════════════════════════════════════════════════════════════

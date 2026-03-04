@@ -1,0 +1,11 @@
+{
+  "total": 10,
+  "processed": 5259,
+  "succeeded": 5259,
+  "failed": 0,
+  "skipped": 0,
+  "lastProcessedTicker": "GSKH",
+  "failedTickers": [],
+  "startedAt": "2026-02-22T03:41:43.200Z",
+  "lastUpdatedAt": "2026-02-22T04:24:48.466Z"
+}

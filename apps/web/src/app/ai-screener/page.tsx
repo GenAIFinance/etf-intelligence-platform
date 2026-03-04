@@ -1,9 +1,21 @@
 'use client';
 
+// ETF AI Screener — DeepSeek NLP powered
+// apps/web/src/app/ai-screener/page.tsx
+//
+// Flow:
+//   idle → user types query → POST /api/ai-screener/nlp (DeepSeek extracts params)
+//        → confirmation card (interpretation + badges + active constraints)
+//        → user hits "Run" or "Adjust" → POST /api/screener/screen → results
+//        → refinement bar (chips + free-text) loops back to NLP with previousRequest
+
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, RefreshCw, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import {
+  ArrowLeft, RefreshCw, ChevronDown, ChevronUp, ExternalLink,
+  Send, Sparkles, AlertCircle, CheckCircle2, PenLine, Loader2,
+} from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -11,65 +23,72 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 // TYPES
 // ============================================================================
 
-type Step = 'objective' | 'constraints' | 'riskTest' | 'results' | 'feedback';
-type Objective = 'growth' | 'income' | 'preservation';
-type RiskProfile = 'low' | 'medium' | 'high';
-type EsgPreference = 'no_preference' | 'prefer' | 'exclude';
+type Objective    = 'growth' | 'income' | 'preservation';
+type RiskProfile  = 'low' | 'medium' | 'high';
+type EsgPref      = 'no_preference' | 'prefer' | 'exclude';
+type Confidence   = 'high' | 'medium' | 'low';
+type FeedbackHint = 'too_risky' | 'too_conservative' | 'too_expensive' | 'not_aligned';
+type Mode         = 'idle' | 'parsing' | 'confirming' | 'screening' | 'results';
 
 interface Constraints {
-  excludeSectors: string[];
-  esgPreference: EsgPreference;
-  maxExpenseRatio: number | null;
-  minAUM: number | null;
-  minSharpe: number | null;
-  minReturn3Y: number | null;
-  minReturn5Y: number | null;
-  maxVolatility: number | null;
+  excludeSectors:  string[];
+  esgPreference:   EsgPref;
+  maxExpenseRatio: number | null;   // decimal e.g. 0.002
+  minAUM:          number | null;   // USD     e.g. 1_000_000_000
+  minSharpe:       number | null;
+  minReturn3Y:     number | null;   // decimal e.g. 0.10
+  minReturn5Y:     number | null;
+  maxVolatility:   number | null;   // decimal e.g. 0.15
+}
+
+interface ScreenerRequest {
+  objective:   Objective;
+  riskProfile: RiskProfile;
+  constraints: Constraints;
+  page?:     number;
+  pageSize?: number;
+  sortBy?:   'totalScore' | 'expenseRatio' | 'sharpeRatio' | 'volatility';
+}
+
+interface ParsedParams {
+  request:        ScreenerRequest;
+  interpretation: string;
+  confidence:     Confidence;
 }
 
 interface MetricContributor {
-  metricName: string;
-  weight: number;
-  rawValue: number | null;
+  metricName:   string;
+  weight:       number;
+  rawValue:     number | null;
   contribution: number;
 }
 
 interface ScreenerResult {
-  ticker: string;
-  name: string;
-  totalScore: number;
-  confidenceBand: 'High' | 'Medium' | 'Low';
+  ticker:          string;
+  name:            string;
+  totalScore:      number;
+  confidenceBand:  'High' | 'Medium' | 'Low';
   dataCompleteness: number;
-  expenseRatio: number | null;
-  volatility: number | null;
-  maxDrawdown: number | null;
-  sharpeRatio: number | null;
-  annualized3Y: number | null;
-  annualized5Y: number | null;
-  dividendYield: number | null;
-  aum: number | null;
-  assetClass: string | null;
-  contributors: MetricContributor[];
+  expenseRatio:    number | null;
+  volatility:      number | null;
+  maxDrawdown:     number | null;
+  sharpeRatio:     number | null;
+  annualized3Y:    number | null;
+  annualized5Y:    number | null;
+  dividendYield:   number | null;
+  aum:             number | null;
+  assetClass:      string | null;
+  contributors:    MetricContributor[];
 }
 
 interface ScreenerResponse {
-  data: ScreenerResult[];
-  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  data:             ScreenerResult[];
+  pagination:       { page: number; pageSize: number; total: number; totalPages: number };
   diagnosisSummary: string;
 }
 
-interface Message {
-  id: string;
-  role: 'assistant' | 'user';
-  content: string;
-  step?: Step;
-  options?: { value: string; label: string }[];
-  results?: ScreenerResponse;
-  timestamp: Date;
-}
-
 // ============================================================================
-// HELPERS
+// DISPLAY HELPERS
 // ============================================================================
 
 function fmt(n: number | null, type: 'pct' | 'pct2' | 'num' | 'aum'): string {
@@ -85,42 +104,78 @@ function fmt(n: number | null, type: 'pct' | 'pct2' | 'num' | 'aum'): string {
   }
 }
 
-function bandColor(band: string) {
-  return {
-    High:   'bg-emerald-50 text-emerald-700 border-emerald-200',
-    Medium: 'bg-amber-50 text-amber-700 border-amber-200',
-    Low:    'bg-red-50 text-red-600 border-red-200',
-  }[band] ?? 'bg-gray-100 text-gray-600';
+const BAND_COLOR: Record<string, string> = {
+  High:   'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Medium: 'bg-amber-50  text-amber-700  border-amber-200',
+  Low:    'bg-red-50    text-red-600    border-red-200',
+};
+const returnColor = (v: number | null) =>
+  v === null ? 'text-gray-400' : v >= 0 ? 'text-emerald-600' : 'text-red-500';
+
+const OBJ_LABEL:  Record<Objective,   string> = { growth: 'Growth', income: 'Income', preservation: 'Preservation' };
+const RISK_LABEL: Record<RiskProfile, string> = { low: 'Conservative', medium: 'Moderate', high: 'Aggressive' };
+const OBJ_COLOR:  Record<Objective,   string> = {
+  growth:       'bg-blue-100   text-blue-800',
+  income:       'bg-emerald-100 text-emerald-800',
+  preservation: 'bg-purple-100 text-purple-800',
+};
+const RISK_COLOR: Record<RiskProfile, string> = {
+  low:    'bg-teal-100  text-teal-800',
+  medium: 'bg-amber-100 text-amber-800',
+  high:   'bg-orange-100 text-orange-800',
+};
+const CONFIDENCE_BADGE: Record<Confidence, { icon: JSX.Element; label: string; color: string }> = {
+  high:   { icon: <CheckCircle2 className="w-3.5 h-3.5" />, label: 'High confidence',   color: 'text-emerald-600' },
+  medium: { icon: <AlertCircle  className="w-3.5 h-3.5" />, label: 'Medium confidence', color: 'text-amber-600'   },
+  low:    { icon: <AlertCircle  className="w-3.5 h-3.5" />, label: 'Low confidence — please review', color: 'text-red-500' },
+};
+
+/** Convert active constraints to human-readable chips */
+function chips(c: Constraints): string[] {
+  const out: string[] = [];
+  if (c.maxExpenseRatio !== null) out.push(`Expense ≤ ${(c.maxExpenseRatio * 100).toFixed(2)}%`);
+  if (c.minAUM          !== null) out.push(`AUM ≥ ${c.minAUM >= 1e9 ? `$${(c.minAUM / 1e9).toFixed(1)}B` : `$${(c.minAUM / 1e6).toFixed(0)}M`}`);
+  if (c.minSharpe       !== null) out.push(`Sharpe ≥ ${c.minSharpe.toFixed(1)}`);
+  if (c.minReturn3Y     !== null) out.push(`3Y Return ≥ ${(c.minReturn3Y * 100).toFixed(0)}%`);
+  if (c.minReturn5Y     !== null) out.push(`5Y Return ≥ ${(c.minReturn5Y * 100).toFixed(0)}%`);
+  if (c.maxVolatility   !== null) out.push(`Volatility ≤ ${(c.maxVolatility * 100).toFixed(0)}%`);
+  if (c.excludeSectors.length > 0) out.push(`Exclude: ${c.excludeSectors.join(', ')}`);
+  if (c.esgPreference === 'prefer')  out.push('ESG preferred');
+  if (c.esgPreference === 'exclude') out.push('No ESG');
+  return out;
 }
 
-function returnColor(v: number | null) {
-  if (v === null) return 'text-gray-400';
-  return v >= 0 ? 'text-emerald-600' : 'text-red-500';
-}
+const DEFAULT_CONSTRAINTS: Constraints = {
+  excludeSectors: [], esgPreference: 'no_preference',
+  maxExpenseRatio: null, minAUM: null, minSharpe: null,
+  minReturn3Y: null, minReturn5Y: null, maxVolatility: null,
+};
+
+const EXAMPLE_QUERIES = [
+  'Low-cost broad market ETFs with good 3-year returns and low volatility',
+  'Conservative income ETFs focused on dividends, large funds only',
+  'Aggressive growth ETFs, no ESG, expense ratio under 0.3%',
+  'Capital preservation with high Sharpe ratio and minimal drawdown',
+];
 
 // ============================================================================
 // RESULT CARD
 // ============================================================================
 
 function ResultCard({ item, rank, isSelected, onToggle }: {
-  item: ScreenerResult; rank: number;
-  isSelected: boolean; onToggle: (ticker: string) => void;
+  item: ScreenerResult; rank: number; isSelected: boolean; onToggle: (t: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-
   return (
     <div className={`bg-white border rounded-xl overflow-hidden hover:shadow-md transition-all ${isSelected ? 'border-teal-400 ring-1 ring-teal-300' : 'border-gray-200 hover:border-teal-300'}`}>
       <div className="p-4">
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
-            {/* Compare checkbox */}
             <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={() => onToggle(item.ticker)}
+              type="checkbox" checked={isSelected} onChange={() => onToggle(item.ticker)}
               onClick={e => e.stopPropagation()}
-              className="w-4 h-4 rounded border-gray-300 text-teal-600 cursor-pointer accent-teal-600"
+              className="w-4 h-4 rounded border-gray-300 accent-teal-600 cursor-pointer"
               title="Select for comparison"
             />
             <span className="w-7 h-7 flex items-center justify-center bg-teal-50 text-teal-700 text-xs font-bold rounded-lg border border-teal-100">
@@ -132,7 +187,7 @@ function ResultCard({ item, rank, isSelected, onToggle }: {
                   {item.ticker}
                 </Link>
                 <ExternalLink className="w-3 h-3 text-gray-400" />
-                <span className={`px-1.5 py-0.5 text-xs font-medium rounded border ${bandColor(item.confidenceBand)}`}>
+                <span className={`px-1.5 py-0.5 text-xs font-medium rounded border ${BAND_COLOR[item.confidenceBand] ?? 'bg-gray-100 text-gray-600'}`}>
                   {item.confidenceBand}
                 </span>
               </div>
@@ -145,86 +200,54 @@ function ResultCard({ item, rank, isSelected, onToggle }: {
           </div>
         </div>
 
-        {/* Key metrics row */}
+        {/* Key metrics */}
         <div className="grid grid-cols-3 gap-2 mb-3">
-          <div className="bg-gray-50 rounded-lg p-2 text-center">
-            <div className="text-xs text-gray-400 mb-0.5">3Y Return</div>
-            <div className={`text-sm font-semibold ${returnColor(item.annualized3Y)}`}>
-              {fmt(item.annualized3Y, 'pct')}
+          {([
+            { label: '3Y Return', value: fmt(item.annualized3Y, 'pct'), cls: returnColor(item.annualized3Y) },
+            { label: 'Sharpe',    value: fmt(item.sharpeRatio,  'num'), cls: 'text-gray-800' },
+            { label: 'Expense',   value: fmt(item.expenseRatio, 'pct2'), cls: 'text-gray-800' },
+          ] as const).map(m => (
+            <div key={m.label} className="bg-gray-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-gray-400 mb-0.5">{m.label}</div>
+              <div className={`text-sm font-semibold ${m.cls}`}>{m.value}</div>
             </div>
-          </div>
-          <div className="bg-gray-50 rounded-lg p-2 text-center">
-            <div className="text-xs text-gray-400 mb-0.5">Sharpe</div>
-            <div className="text-sm font-semibold text-gray-800">{fmt(item.sharpeRatio, 'num')}</div>
-          </div>
-          <div className="bg-gray-50 rounded-lg p-2 text-center">
-            <div className="text-xs text-gray-400 mb-0.5">Expense</div>
-            <div className="text-sm font-semibold text-gray-800">{fmt(item.expenseRatio, 'pct2')}</div>
-          </div>
+          ))}
         </div>
 
-        {/* Top 3 score contributors */}
+        {/* Score contributors */}
         <div className="space-y-1">
           {item.contributors.slice(0, 5).map((c, i) => (
             <div key={i} className="flex items-center gap-2 text-xs text-gray-600">
               <span className="font-mono text-teal-600 w-8 text-right">[{c.weight.toFixed(0)}%]</span>
               <span className="flex-1">{c.metricName}</span>
               <div className="w-16 bg-gray-100 rounded-full h-1.5">
-                <div
-                  className="bg-teal-500 h-1.5 rounded-full"
-                  style={{ width: `${Math.min(100, c.contribution)}%` }}
-                />
+                <div className="bg-teal-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, c.contribution)}%` }} />
               </div>
             </div>
           ))}
         </div>
 
-        {/* Expand toggle */}
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="mt-3 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-        >
+        <button onClick={() => setExpanded(!expanded)} className="mt-3 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
           {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          {expanded ? 'Less detail' : 'More detail'}
+          {expanded ? 'Less' : 'More detail'}
         </button>
       </div>
 
-      {/* Expanded detail */}
+      {/* Expanded */}
       {expanded && (
         <div className="border-t border-gray-100 px-4 py-3 bg-gray-50">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
-            <div className="flex justify-between">
-              <span className="text-gray-500">5Y Return</span>
-              <span className={`font-medium ${returnColor(item.annualized5Y)}`}>{fmt(item.annualized5Y, 'pct')}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Max Drawdown</span>
-              <span className="font-medium text-red-500">{item.maxDrawdown !== null ? `-${fmt(item.maxDrawdown, 'pct2')}` : 'N/A'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Volatility</span>
-              <span className="font-medium text-gray-700">{fmt(item.volatility, 'pct2')}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">AUM</span>
-              <span className="font-medium text-gray-700">{fmt(item.aum, 'aum')}</span>
-            </div>
+            <div className="flex justify-between"><span className="text-gray-500">5Y Return</span><span className={`font-medium ${returnColor(item.annualized5Y)}`}>{fmt(item.annualized5Y, 'pct')}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Max Drawdown</span><span className="font-medium text-red-500">{item.maxDrawdown !== null ? `-${fmt(item.maxDrawdown, 'pct2')}` : 'N/A'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Volatility</span><span className="font-medium text-gray-700">{fmt(item.volatility, 'pct2')}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">AUM</span><span className="font-medium text-gray-700">{fmt(item.aum, 'aum')}</span></div>
             {item.dividendYield !== null && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Dividend Yield</span>
-                <span className="font-medium text-emerald-600">{fmt(item.dividendYield, 'pct2')}</span>
-              </div>
+              <div className="flex justify-between"><span className="text-gray-500">Div. Yield</span><span className="font-medium text-emerald-600">{fmt(item.dividendYield, 'pct2')}</span></div>
             )}
             {item.assetClass && (
-              <div className="flex justify-between col-span-2">
-                <span className="text-gray-500">Asset Class</span>
-                <span className="font-medium text-gray-700">{item.assetClass}</span>
-              </div>
+              <div className="flex justify-between col-span-2"><span className="text-gray-500">Asset Class</span><span className="font-medium text-gray-700">{item.assetClass}</span></div>
             )}
-            <div className="flex justify-between col-span-2">
-              <span className="text-gray-500">Data completeness</span>
-              <span className="font-medium text-gray-700">{item.dataCompleteness.toFixed(0)}%</span>
-            </div>
+            <div className="flex justify-between col-span-2"><span className="text-gray-500">Data completeness</span><span className="font-medium text-gray-700">{item.dataCompleteness.toFixed(0)}%</span></div>
           </div>
         </div>
       )}
@@ -233,212 +256,177 @@ function ResultCard({ item, rank, isSelected, onToggle }: {
 }
 
 // ============================================================================
-// RESULTS PANEL
+// CONFIRMATION CARD
 // ============================================================================
 
-function ResultsPanel({
-  results,
-  isLoading,
-  onLoadMore,
-  canLoadMore,
-  selectedTickers,
-  onToggleSelect,
-}: {
-  results: ScreenerResponse;
-  isLoading: boolean;
-  onLoadMore: () => void;
-  canLoadMore: boolean;
-  selectedTickers: Set<string>;
-  onToggleSelect: (ticker: string) => void;
+function ConfirmationCard({ parsed, onConfirm, onEditConfirm }: {
+  parsed: ParsedParams;
+  onConfirm: () => void;
+  onEditConfirm: (r: ScreenerRequest) => void;
 }) {
-  const router = useRouter();
-  const canCompare = selectedTickers.size >= 2 && selectedTickers.size <= 15;
+  const [editMode, setEditMode] = useState(false);
+  const [draft, setDraft]       = useState<ScreenerRequest>(parsed.request);
 
-  function handleCompare() {
-    const tickers = Array.from(selectedTickers).join(',');
-    router.push(`/compare?tickers=${tickers}`);
-  }
+  const safeFloat = (s: string): number | null => { const f = parseFloat(s); return isNaN(f) ? null : f; };
+  const setC = (k: keyof Constraints, v: any) => setDraft(d => ({ ...d, constraints: { ...d.constraints, [k]: v } }));
+
+  const activeChips = chips(parsed.request.constraints);
+  const cb = CONFIDENCE_BADGE[parsed.confidence];
 
   return (
-    <div className="mt-4 space-y-3">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-gray-500">{results.pagination.total} ETFs matched</span>
-        <div className="flex items-center gap-3">
-          {selectedTickers.size > 0 && (
-            <span className="text-xs text-teal-600 font-medium">{selectedTickers.size} selected</span>
+    <div className="bg-white border border-teal-200 rounded-2xl rounded-tl-sm shadow-sm overflow-hidden">
+      {/* Interpretation header */}
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100 space-y-2">
+        <div className="flex items-start gap-2">
+          <Sparkles className="w-4 h-4 text-teal-500 mt-0.5 flex-shrink-0" />
+          <p className="text-sm text-gray-700 italic leading-relaxed">{parsed.interpretation}</p>
+        </div>
+        <div className={`flex items-center gap-1.5 text-xs ${cb.color}`}>
+          {cb.icon}
+          <span>{cb.label}</span>
+        </div>
+      </div>
+
+      {!editMode ? (
+        <div className="px-4 py-3 space-y-3">
+          {/* Profile badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${OBJ_COLOR[parsed.request.objective]}`}>
+              {OBJ_LABEL[parsed.request.objective]}
+            </span>
+            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${RISK_COLOR[parsed.request.riskProfile]}`}>
+              {RISK_LABEL[parsed.request.riskProfile]} risk
+            </span>
+          </div>
+
+          {/* Constraint chips */}
+          {activeChips.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {activeChips.map(c => (
+                <span key={c} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-md">{c}</span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">No additional constraints — screening all qualifying ETFs</p>
           )}
-          <button
-            onClick={handleCompare}
-            disabled={!canCompare}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors
-              disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed
-              enabled:bg-teal-600 enabled:text-white enabled:hover:bg-teal-700"
-          >
-            Compare{selectedTickers.size >= 2 ? ` (${selectedTickers.size})` : ''}
-          </button>
-          <span className="text-xs text-gray-400">Page {results.pagination.page} of {results.pagination.totalPages}</span>
-        </div>
-      </div>
-      {results.data.map((item, i) => (
-        <ResultCard
-          key={item.ticker}
-          item={item}
-          rank={(results.pagination.page - 1) * results.pagination.pageSize + i + 1}
-          isSelected={selectedTickers.has(item.ticker)}
-          onToggle={onToggleSelect}
-        />
-      ))}
 
-    </div>
-  );
-}
+          <div className="flex gap-2 pt-1">
+            <button onClick={onConfirm}
+              className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl transition-colors">
+              Run Screener →
+            </button>
+            <button onClick={() => setEditMode(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 text-gray-600 hover:border-teal-300 hover:text-teal-700 text-sm rounded-xl transition-colors">
+              <PenLine className="w-3.5 h-3.5" /> Adjust
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* ── Inline edit form ── */
+        <div className="px-4 py-3 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Objective</label>
+              <select value={draft.objective} onChange={e => setDraft(d => ({ ...d, objective: e.target.value as Objective }))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400">
+                <option value="growth">Growth</option>
+                <option value="income">Income</option>
+                <option value="preservation">Preservation</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Risk profile</label>
+              <select value={draft.riskProfile} onChange={e => setDraft(d => ({ ...d, riskProfile: e.target.value as RiskProfile }))}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400">
+                <option value="low">Conservative</option>
+                <option value="medium">Moderate</option>
+                <option value="high">Aggressive</option>
+              </select>
+            </div>
+          </div>
 
-// ============================================================================
-// CONSTRAINTS FORM
-// ============================================================================
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Max expense ratio (%)</label>
+              <input type="number" placeholder="e.g. 0.50" min="0" max="5" step="0.01"
+                value={draft.constraints.maxExpenseRatio !== null ? (draft.constraints.maxExpenseRatio * 100).toFixed(2) : ''}
+                onChange={e => setC('maxExpenseRatio', e.target.value ? safeFloat(e.target.value)! / 100 : null)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Min AUM ($B)</label>
+              <input type="number" placeholder="e.g. 1" min="0" step="0.1"
+                value={draft.constraints.minAUM !== null ? (draft.constraints.minAUM / 1e9).toFixed(1) : ''}
+                onChange={e => setC('minAUM', e.target.value ? safeFloat(e.target.value)! * 1e9 : null)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400" />
+            </div>
+          </div>
 
-function ConstraintsForm({ onSubmit }: { onSubmit: (c: Constraints & { raw: any }) => void }) {
-  const [form, setForm] = useState({
-    excludeSectors: '',
-    esgPreference: 'no_preference' as EsgPreference,
-    maxExpenseRatio: '',
-    minAUM: '',
-    minSharpe: '',
-    minReturn3Y: '',
-    minReturn5Y: '',
-    maxVolatility: '',
-  });
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Min Sharpe ratio</label>
+              <input type="number" placeholder="e.g. 0.5" step="0.1" min="0"
+                value={draft.constraints.minSharpe ?? ''}
+                onChange={e => setC('minSharpe', e.target.value ? safeFloat(e.target.value) : null)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Max volatility (%)</label>
+              <input type="number" placeholder="e.g. 20" min="0" max="100" step="1"
+                value={draft.constraints.maxVolatility !== null ? (draft.constraints.maxVolatility * 100).toFixed(0) : ''}
+                onChange={e => setC('maxVolatility', e.target.value ? safeFloat(e.target.value)! / 100 : null)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400" />
+            </div>
+          </div>
 
-  const handleSubmit = () => {
-    const safeFloat = (v: string) => v.trim() !== '' && !isNaN(parseFloat(v)) ? parseFloat(v) : null;
-    const excludeSectors = form.excludeSectors.split(',').map(s => s.trim()).filter(Boolean);
-    onSubmit({
-      excludeSectors,
-      esgPreference: form.esgPreference,
-      maxExpenseRatio: safeFloat(form.maxExpenseRatio) !== null ? safeFloat(form.maxExpenseRatio)! / 100 : null,
-      minAUM:          safeFloat(form.minAUM) !== null ? safeFloat(form.minAUM)! * 1e9 : null,
-      minSharpe:       safeFloat(form.minSharpe),
-      minReturn3Y:     safeFloat(form.minReturn3Y) !== null ? safeFloat(form.minReturn3Y)! / 100 : null,
-      minReturn5Y:     safeFloat(form.minReturn5Y) !== null ? safeFloat(form.minReturn5Y)! / 100 : null,
-      maxVolatility:   safeFloat(form.maxVolatility) !== null ? safeFloat(form.maxVolatility)! / 100 : null,
-      raw: form,
-    });
-  };
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Min 3Y return (%)</label>
+              <input type="number" placeholder="e.g. 10" step="1"
+                value={draft.constraints.minReturn3Y !== null ? (draft.constraints.minReturn3Y * 100).toFixed(0) : ''}
+                onChange={e => setC('minReturn3Y', e.target.value ? safeFloat(e.target.value)! / 100 : null)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Min 5Y return (%)</label>
+              <input type="number" placeholder="e.g. 8" step="1"
+                value={draft.constraints.minReturn5Y !== null ? (draft.constraints.minReturn5Y * 100).toFixed(0) : ''}
+                onChange={e => setC('minReturn5Y', e.target.value ? safeFloat(e.target.value)! / 100 : null)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400" />
+            </div>
+          </div>
 
-  return (
-    <div className="mt-3 space-y-3">
-      <div>
-        <label className="text-xs font-medium text-gray-600 block mb-1">Sectors to exclude (comma-separated)</label>
-        <input
-          type="text"
-          placeholder="e.g. oil, tobacco, weapons"
-          value={form.excludeSectors}
-          onChange={e => setForm(f => ({ ...f, excludeSectors: e.target.value }))}
-          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-        />
-      </div>
-      <div>
-        <label className="text-xs font-medium text-gray-600 block mb-1">ESG preference</label>
-        <select
-          value={form.esgPreference}
-          onChange={e => setForm(f => ({ ...f, esgPreference: e.target.value as EsgPreference }))}
-          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-        >
-          <option value="no_preference">No preference</option>
-          <option value="prefer">Prefer ESG funds</option>
-          <option value="exclude">Exclude ESG funds</option>
-        </select>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-medium text-gray-600 block mb-1">Max expense ratio (%)</label>
-          <input
-            type="number"
-            placeholder="e.g. 0.50"
-            min="0"
-            max="5"
-            step="0.01"
-            value={form.maxExpenseRatio}
-            onChange={e => setForm(f => ({ ...f, maxExpenseRatio: e.target.value }))}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-          />
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">ESG preference</label>
+            <select value={draft.constraints.esgPreference}
+              onChange={e => setC('esgPreference', e.target.value as EsgPref)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="no_preference">No preference</option>
+              <option value="prefer">Prefer ESG funds</option>
+              <option value="exclude">Exclude ESG funds</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">Exclude sectors (comma-separated)</label>
+            <input type="text" placeholder="e.g. oil, tobacco, weapons"
+              value={draft.constraints.excludeSectors.join(', ')}
+              onChange={e => setC('excludeSectors', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400" />
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => { onEditConfirm(draft); setEditMode(false); }}
+              className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl transition-colors">
+              Run with these settings →
+            </button>
+            <button onClick={() => setEditMode(false)}
+              className="px-4 py-2.5 border border-gray-200 text-gray-500 hover:text-gray-700 text-sm rounded-xl transition-colors">
+              Cancel
+            </button>
+          </div>
         </div>
-        <div>
-          <label className="text-xs font-medium text-gray-600 block mb-1">Min AUM ($B)</label>
-          <input
-            type="number"
-            placeholder="e.g. 1"
-            min="0"
-            step="0.1"
-            value={form.minAUM}
-            onChange={e => setForm(f => ({ ...f, minAUM: e.target.value }))}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-medium text-gray-600 block mb-1">Min Sharpe ratio</label>
-          <input
-            type="number"
-            placeholder="e.g. 0.5"
-            step="0.1"
-            min="0"
-            value={form.minSharpe}
-            onChange={e => setForm(f => ({ ...f, minSharpe: e.target.value }))}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-gray-600 block mb-1">Max volatility (%)</label>
-          <input
-            type="number"
-            placeholder="e.g. 20"
-            min="0"
-            max="100"
-            step="1"
-            value={form.maxVolatility}
-            onChange={e => setForm(f => ({ ...f, maxVolatility: e.target.value }))}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-medium text-gray-600 block mb-1">Min 3Y return (%)</label>
-          <input
-            type="number"
-            placeholder="e.g. 5"
-            step="1"
-            value={form.minReturn3Y}
-            onChange={e => setForm(f => ({ ...f, minReturn3Y: e.target.value }))}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-gray-600 block mb-1">Min 5Y return (%)</label>
-          <input
-            type="number"
-            placeholder="e.g. 8"
-            step="1"
-            value={form.minReturn5Y}
-            onChange={e => setForm(f => ({ ...f, minReturn5Y: e.target.value }))}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-          />
-        </div>
-      </div>
-      <button
-        onClick={handleSubmit}
-        className="w-full py-2.5 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors"
-      >
-        Continue →
-      </button>
-      <button
-        onClick={() => onSubmit({ excludeSectors: [], esgPreference: 'no_preference', maxExpenseRatio: null, minAUM: null, minSharpe: null, minReturn3Y: null, minReturn5Y: null, maxVolatility: null, raw: form })}
-        className="w-full py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
-      >
-        Skip — no constraints
-      </button>
+      )}
     </div>
   );
 }
@@ -447,376 +435,143 @@ function ConstraintsForm({ onSubmit }: { onSubmit: (c: Constraints & { raw: any 
 // MAIN PAGE
 // ============================================================================
 
-export default function DiagnosticScreener() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [step, setStep] = useState<Step>('objective');
-  const [profile, setProfile] = useState<{
-    objective: Objective | null;
-    riskProfile: RiskProfile | null;
-    constraints: Constraints;
-  }>({
-    objective: null,
-    riskProfile: null,
-    constraints: { excludeSectors: [], esgPreference: 'no_preference', maxExpenseRatio: null, minAUM: null, minSharpe: null, minReturn3Y: null, minReturn5Y: null, maxVolatility: null },
-  });
-  const [results, setResults] = useState<ScreenerResponse | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
+export default function AiScreenerPage() {
+  const [mode, setMode]             = useState<Mode>('idle');
+  const [query, setQuery]           = useState('');
+  const [refineText, setRefineText] = useState('');
+  const [parsed, setParsed]         = useState<ParsedParams | null>(null);
+  const [activeReq, setActiveReq]   = useState<ScreenerRequest | null>(null);
+  const [results, setResults]       = useState<ScreenerResponse | null>(null);
+  const [error, setError]           = useState<string | null>(null);
+  const [selected, setSelected]     = useState<Set<string>>(new Set());
 
-  function toggleSelectTicker(ticker: string) {
-    setSelectedTickers(prev => {
+  const router     = useRouter();
+  const bottomRef  = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [mode, parsed, results, error]);
+
+  function toggleTicker(ticker: string) {
+    setSelected(prev => {
       const next = new Set(prev);
       if (next.has(ticker)) { next.delete(ticker); } else if (next.size < 15) { next.add(ticker); }
       return next;
     });
   }
-  const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Initial message
-  useEffect(() => {
-    addAssistant(
-      `**Welcome to the ETF Diagnostic Screener.**\n\nI'll help you find the right ETFs through a few diagnostic questions.\n\n**Which best describes your goal?**`,
-      'objective',
-      [
-        { value: 'growth',       label: 'Growth — Maximize long-term capital appreciation' },
-        { value: 'income',       label: 'Income — Generate regular dividends' },
-        { value: 'preservation', label: 'Capital Preservation — Protect against losses' },
-      ]
-    );
-  }, []);
+  // ── Parse via DeepSeek ───────────────────────────────────────────────────
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+  async function parseQuery(q: string, previous?: ScreenerRequest, hint?: FeedbackHint) {
+    setError(null);
+    setMode('parsing');
 
-  function addAssistant(content: string, msgStep?: Step, options?: any[], results?: ScreenerResponse) {
-    setMessages(m => [...m, {
-      id: Date.now().toString(),
-      role: 'assistant',
-      content,
-      step: msgStep,
-      options,
-      results,
-      timestamp: new Date(),
-    }]);
-  }
-
-  function addUser(content: string) {
-    setMessages(m => [...m, {
-      id: Date.now().toString() + 'u',
-      role: 'user',
-      content,
-      timestamp: new Date(),
-    }]);
-  }
-
-  // ── Step handlers ──────────────────────────────────────────────────────────
-
-  function handleObjective(value: Objective, label: string) {
-    setProfile(p => ({ ...p, objective: value }));
-    addUser(label);
-    setStep('constraints');
-    setTimeout(() => {
-      addAssistant(
-        `**Let me understand your constraints.**\n\nSet any filters below — all are optional.`,
-        'constraints'
-      );
-    }, 300);
-  }
-
-  function handleConstraints(c: Constraints & { raw: any }) {
-    setProfile(p => ({ ...p, constraints: { excludeSectors: c.excludeSectors, esgPreference: c.esgPreference, maxExpenseRatio: c.maxExpenseRatio, minAUM: c.minAUM, minSharpe: c.minSharpe ?? null, minReturn3Y: c.minReturn3Y ?? null, minReturn5Y: c.minReturn5Y ?? null, maxVolatility: c.maxVolatility ?? null } }));
-    const summary: string[] = [];
-    if (c.excludeSectors.length > 0) summary.push(`Exclude: ${c.excludeSectors.join(', ')}`);
-    summary.push(`ESG: ${c.esgPreference.replace('_', ' ')}`);
-    if (c.maxExpenseRatio) summary.push(`Max expense: ${(c.maxExpenseRatio * 100).toFixed(2)}%`);
-    if (c.minAUM) summary.push(`Min AUM: $${(c.minAUM / 1e9).toFixed(1)}B`);
-    addUser(summary.join(' | '));
-    setStep('riskTest');
-    setTimeout(() => {
-      addAssistant(
-        `**Risk Stress Test**\n\nThis helps me understand your true risk tolerance.\n\n_If the market dropped 20% tomorrow, would you:_`,
-        'riskTest',
-        [
-          { value: 'low',    label: 'A) Sell to protect capital' },
-          { value: 'medium', label: 'B) Hold and wait it out' },
-          { value: 'high',   label: 'C) Buy more — this is an opportunity' },
-        ]
-      );
-    }, 300);
-  }
-
-  async function handleRisk(value: RiskProfile, label: string) {
-    addUser(label);
-    setProfile(p => ({ ...p, riskProfile: value }));
-    setIsLoading(true);
-    setStep('results');
-
-    const res = await runScreen(profile.objective!, value, profile.constraints, 1);
-    setResults(res);
-    setCurrentPage(1);
-    setIsLoading(false);
-
-    if (res) {
-      addAssistant(
-        `**Diagnosis Summary**\n\n${res.diagnosisSummary}\n\n_Rankings are based on your inputs and historical data — not predictions._`,
-        'results',
-        undefined,
-        res
-      );
-      setTimeout(() => {
-        addAssistant(
-          `**Does this feel:**`,
-          'feedback',
-          [
-            { value: 'too_risky',       label: 'A) Too risky' },
-            { value: 'too_conservative', label: 'B) Too conservative' },
-            { value: 'too_expensive',   label: 'C) Too expensive' },
-            { value: 'not_aligned',     label: 'D) Not aligned with my goal' },
-            { value: 'about_right',     label: 'E) About right' },
-          ]
-        );
-      }, 1000);
-    }
-  }
-
-  // ── Feedback adjustment framework ────────────────────────────────────────
-  // Principle: feedback ≠ new goal. Objective never changes.
-  // Adjustments are one-notch only, explainable, and preserve scoring discipline.
-
-  function getOneNotchUp(current: RiskProfile): RiskProfile | null {
-    if (current === 'low')    return 'medium';
-    if (current === 'medium') return 'high';
-    return null; // already at max
-  }
-
-  function getOneNotchDown(current: RiskProfile): RiskProfile | null {
-    if (current === 'high')   return 'medium';
-    if (current === 'medium') return 'low';
-    return null; // already at min
-  }
-
-  function riskLabel(r: RiskProfile): string {
-    return { low: 'Conservative', medium: 'Moderate', high: 'Aggressive' }[r];
-  }
-
-  async function handleFeedback(value: string, label: string) {
-    addUser(label);
-    const currentRisk = profile.riskProfile!;
-
-    // ── About right — wrap up ─────────────────────────────────────────────
-    if (value === 'about_right') {
-      addAssistant(
-        `**Great — your diagnosis is complete.**\n\n` +
-        `Your profile: **${profile.objective} / ${riskLabel(currentRisk)}**\n\n` +
-        `- Click any ETF ticker to see full analysis\n` +
-        `- Use the **Compare** feature for side-by-side analysis\n` +
-        `- Restart anytime with different parameters\n\n` +
-        `_These are educational insights based on historical data, not financial advice._`
-      );
-      return;
-    }
-
-    // ── Too conservative — return frustration, not true risk appetite change ─
-    if (value === 'too_conservative') {
-      const newRisk = getOneNotchUp(currentRisk);
-      if (!newRisk) {
-        addAssistant(
-          `**Already at the most growth-oriented profile.**\n\n` +
-          `The model is already prioritizing long-term returns as heavily as the framework allows. ` +
-          `If these results still feel muted, consider whether your goal should be revisited — ` +
-          `or review individual ETF detail pages for deeper analysis.\n\n` +
-          `_Restarting with a different objective is always an option._`
-        );
-        return;
-      }
-      addAssistant(
-        `**Adjusting for more upside potential.**\n\n` +
-        `Shifting from **${riskLabel(currentRisk)} → ${riskLabel(newRisk)}** within your ${profile.objective} goal.\n\n` +
-        `What changes in the scoring:\n` +
-        `- Long-term return weights increase (5Y first, then 3Y)\n` +
-        `- Volatility and drawdown weights decrease slightly\n` +
-        `- Sharpe ratio and expense ratio remain\n\n` +
-        `_We adjusted the model to allow more upside by placing more weight on long-term returns, while still keeping risk efficiency in view._`
-      );
-      setIsLoading(true);
-      setProfile(p => ({ ...p, riskProfile: newRisk }));
-      await new Promise(r => setTimeout(r, 800));
-      const res = await runScreen(profile.objective!, newRisk, profile.constraints, 1);
-      setResults(res); setCurrentPage(1); setIsLoading(false);
-      if (res) {
-        addAssistant(`**Updated Results — ${riskLabel(newRisk)} profile**\n\n${res.diagnosisSummary}`, 'results', undefined, res);
-        setTimeout(() => addFeedbackPrompt(), 1000);
-      }
-      return;
-    }
-
-    // ── Too aggressive — loss anticipation after seeing drawdown metrics ───
-    if (value === 'too_risky') {
-      const newRisk = getOneNotchDown(currentRisk);
-      if (!newRisk) {
-        addAssistant(
-          `**Already at the most conservative profile.**\n\n` +
-          `The model is already maximizing weight on volatility and drawdown protection. ` +
-          `If you feel these results are still too exposed, consider whether your objective ` +
-          `should shift from **${profile.objective}** to **preservation**.\n\n` +
-          `_You can restart with a different goal at any time._`
-        );
-        return;
-      }
-      addAssistant(
-        `**Adjusting for smoother, more stable returns.**\n\n` +
-        `Shifting from **${riskLabel(currentRisk)} → ${riskLabel(newRisk)}** within your ${profile.objective} goal.\n\n` +
-        `What changes in the scoring:\n` +
-        `- Volatility and max drawdown weights increase\n` +
-        `- Sharpe ratio weight increases (prioritizes risk efficiency)\n` +
-        `- Short-term return weights decrease\n` +
-        `- Expense ratio and data quality requirements unchanged\n\n` +
-        `_We adjusted the model to reduce stress and potential drawdowns, prioritizing smoother return paths._`
-      );
-      setIsLoading(true);
-      setProfile(p => ({ ...p, riskProfile: newRisk }));
-      await new Promise(r => setTimeout(r, 800));
-      const res = await runScreen(profile.objective!, newRisk, profile.constraints, 1);
-      setResults(res); setCurrentPage(1); setIsLoading(false);
-      if (res) {
-        addAssistant(`**Updated Results — ${riskLabel(newRisk)} profile**\n\n${res.diagnosisSummary}`, 'results', undefined, res);
-        setTimeout(() => addFeedbackPrompt(), 1000);
-      }
-      return;
-    }
-
-    // ── Too expensive — tighten expense filter by 50%, never remove it ────
-    if (value === 'too_expensive') {
-      const currentMax = profile.constraints.maxExpenseRatio ?? 0.0100;
-      const newMax = currentMax * 0.5;
-      const newConstraints = { ...profile.constraints, maxExpenseRatio: newMax };
-      addAssistant(
-        `**Tightening cost filter.**\n\n` +
-        `Maximum expense ratio reduced from **${(currentMax * 100).toFixed(2)}%** → **${(newMax * 100).toFixed(2)}%**.\n\n` +
-        `_Fees compound against you every year, even when markets are flat. ` +
-        `This filter ensures only the most cost-efficient ETFs in your profile qualify._`
-      );
-      setIsLoading(true);
-      setProfile(p => ({ ...p, constraints: newConstraints }));
-      await new Promise(r => setTimeout(r, 800));
-      const res = await runScreen(profile.objective!, currentRisk, newConstraints, 1);
-      setResults(res); setCurrentPage(1); setIsLoading(false);
-      if (res) {
-        addAssistant(`**Updated Results — cost-filtered**\n\n${res.diagnosisSummary}`, 'results', undefined, res);
-        setTimeout(() => addFeedbackPrompt(), 1000);
-      }
-      return;
-    }
-
-    // ── Not aligned — explain what drives alignment, offer restart ────────
-    if (value === 'not_aligned') {
-      addAssistant(
-        `**Let\'s diagnose the misalignment.**\n\n` +
-        `Your current profile: **${profile.objective} / ${riskLabel(currentRisk)}**\n\n` +
-        `The scoring weights for this profile prioritize:\n` +
-        `- Risk-adjusted returns (Sharpe ratio)\n` +
-        `- Long-term performance (3Y and 5Y returns)\n` +
-        `- Cost efficiency (expense ratio)\n` +
-        `- Downside protection (volatility, drawdown)\n\n` +
-        `If the results feel wrong, it\'s usually because the **objective** doesn\'t match your actual goal. ` +
-        `For example, an income investor may be better served restarting with the Income objective ` +
-        `rather than adjusting risk within Growth.\n\n` +
-        `_Use the Restart button to begin a new diagnosis with a different objective._`
-      );
-      return;
-    }
-  }
-
-  function addFeedbackPrompt() {
-    addAssistant(
-      '**Does this feel better?**',
-      'feedback',
-      [
-        { value: 'too_risky',        label: 'A) Too risky' },
-        { value: 'too_conservative', label: 'B) Too conservative' },
-        { value: 'too_expensive',    label: 'C) Too expensive' },
-        { value: 'not_aligned',      label: 'D) Not aligned with my goal' },
-        { value: 'about_right',      label: 'E) About right' },
-      ]
-    );
-  }
-
-  async function handleLoadMore() {
-    if (!profile.objective || !profile.riskProfile || !results) return;
-    setIsLoading(true);
-    const nextPage = currentPage + 1;
-    const res = await runScreen(profile.objective, profile.riskProfile, profile.constraints, nextPage);
-    if (res) {
-      setResults(prev => prev ? {
-        ...res,
-        data: [...prev.data, ...res.data],
-      } : res);
-      setCurrentPage(nextPage);
-    }
-    setIsLoading(false);
-  }
-
-  async function runScreen(
-    objective: Objective,
-    riskProfile: RiskProfile,
-    constraints: Constraints,
-    page: number
-  ): Promise<ScreenerResponse | null> {
     try {
-      const response = await fetch(`${API_URL}/api/screener/screen`, {
-        method: 'POST',
+      const res = await fetch(`${API_URL}/api/ai-screener/nlp`, {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ objective, riskProfile, constraints, page, pageSize: 200 }),
+        body:    JSON.stringify({ query: q, previousRequest: previous, feedbackHint: hint }),
       });
-      if (!response.ok) throw new Error(`API error ${response.status}`);
-      return await response.json();
-    } catch (err) {
-      console.error('Screen error:', err);
-      addAssistant('Sorry, something went wrong fetching results. Please try again.');
-      return null;
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Error ${res.status}`);
+      }
+
+      const data: ParsedParams = await res.json();
+      setParsed(data);
+      setMode('confirming');
+    } catch (err: any) {
+      setError(err.message ?? 'Something went wrong — please try again');
+      setMode('idle');
     }
+  }
+
+  // ── Run screener ─────────────────────────────────────────────────────────
+
+  async function runScreener(req: ScreenerRequest) {
+    setError(null);
+    setMode('screening');
+    setActiveReq(req);
+    setResults(null);
+    setSelected(new Set());
+
+    try {
+      const res = await fetch(`${API_URL}/api/screener/screen`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ ...req, page: 1, pageSize: 200 }),
+      });
+
+      if (!res.ok) throw new Error(`Screener error ${res.status}`);
+      const data: ScreenerResponse = await res.json();
+      setResults(data);
+      setMode('results');
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to run screener');
+      setMode('confirming');
+    }
+  }
+
+  function handleSubmit() {
+    const q = query.trim();
+    if (!q || mode === 'parsing') return;
+    parseQuery(q);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
+  }
+
+  async function handleRefine(e: React.FormEvent) {
+    e.preventDefault();
+    const q = refineText.trim();
+    if (!q || !activeReq) return;
+    setRefineText('');
+    setMode('idle'); // briefly reset so query bubble re-renders
+    setQuery(q);
+    await parseQuery(q, activeReq);
+  }
+
+  async function handleFeedbackChip(hint: FeedbackHint) {
+    if (!activeReq) return;
+    const msg: Record<FeedbackHint, string> = {
+      too_risky:        'Make it less risky — prioritize stability and lower volatility',
+      too_conservative: 'Make it more aggressive — I want more upside',
+      too_expensive:    'Lower the cost — reduce expense ratio',
+      not_aligned:      'These results feel misaligned — re-evaluate my goal',
+    };
+    setQuery(msg[hint]);
+    await parseQuery(msg[hint], activeReq, hint);
   }
 
   function handleRestart() {
-    setMessages([]);
-    setStep('objective');
-    setProfile({ objective: null, riskProfile: null, constraints: { excludeSectors: [], esgPreference: 'no_preference', maxExpenseRatio: null, minAUM: null, minSharpe: null, minReturn3Y: null, minReturn5Y: null, maxVolatility: null } });
-    setResults(null);
-    setCurrentPage(1);
-    setTimeout(() => {
-      addAssistant(
-        `**Welcome to the ETF Diagnostic Screener.**\n\nI'll help you find the right ETFs through a few diagnostic questions.\n\n**Which best describes your goal?**`,
-        'objective',
-        [
-          { value: 'growth',       label: 'Growth — Maximize long-term capital appreciation' },
-          { value: 'income',       label: 'Income — Generate regular dividends' },
-          { value: 'preservation', label: 'Capital Preservation — Protect against losses' },
-        ]
-      );
-    }, 100);
+    setMode('idle'); setQuery(''); setRefineText('');
+    setParsed(null); setActiveReq(null); setResults(null);
+    setError(null);  setSelected(new Set());
+    setTimeout(() => textareaRef.current?.focus(), 100);
   }
 
-  // ── Message renderer ───────────────────────────────────────────────────────
+  // ── Loading dots ─────────────────────────────────────────────────────────
 
-  function renderContent(text: string) {
-    return text.split('\n').map((line, i) => {
-      if (line.startsWith('**') && line.endsWith('**')) {
-        return <p key={i} className="font-semibold text-gray-900 mb-1">{line.slice(2, -2)}</p>;
-      }
-      if (line.startsWith('_') && line.endsWith('_')) {
-        return <p key={i} className="text-xs text-gray-400 italic mt-1">{line.slice(1, -1)}</p>;
-      }
-      if (line.startsWith('- ')) {
-        return <p key={i} className="text-sm text-gray-600 ml-3">• {line.slice(2)}</p>;
-      }
-      if (line === '') return <div key={i} className="h-1" />;
-      return <p key={i} className="text-sm text-gray-700">{line}</p>;
-    });
-  }
+  const LoadingDots = ({ label }: { label: string }) => (
+    <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="flex gap-1">
+          {[0, 150, 300].map(d => (
+            <span key={d} className="w-2 h-2 bg-teal-400 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
+          ))}
+        </div>
+        <span className="text-sm text-gray-500">{label}</span>
+      </div>
+    </div>
+  );
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  const showQueryBubble = mode !== 'idle' && query;
+  const showIdle        = mode === 'idle' || mode === 'parsing';
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -828,97 +583,197 @@ export default function DiagnosticScreener() {
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div>
-              <h1 className="text-xl font-bold">ETF Diagnostic Screener</h1>
-              <p className="text-sm text-teal-100">Data-grounded, rule-based ETF recommendations</p>
+              <h1 className="text-xl font-bold">ETF AI Screener</h1>
+              <p className="text-sm text-teal-100">Describe what you're looking for in plain English</p>
             </div>
           </div>
-          <button
-            onClick={handleRestart}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Restart
-          </button>
+          {mode !== 'idle' && (
+            <button onClick={handleRestart}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm transition-colors">
+              <RefreshCw className="w-4 h-4" /> Restart
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Chat */}
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4 pb-24">
-        {messages.map(msg => (
-          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            {msg.role === 'assistant' ? (
-              <div className="max-w-full w-full">
-                {/* Assistant bubble */}
-                <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-                  {renderContent(msg.content)}
+      {/* Content */}
+      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4 pb-28">
 
-                  {/* Constraints form */}
-                  {msg.step === 'constraints' && step === 'constraints' && (
-                    <ConstraintsForm onSubmit={handleConstraints} />
-                  )}
-
-                  {/* Option buttons */}
-                  {msg.options && msg.step !== 'constraints' && (
-                    <div className="mt-3 space-y-2">
-                      {msg.options.map(opt => (
-                        <button
-                          key={opt.value}
-                          onClick={() => {
-                            if (msg.step === 'objective') handleObjective(opt.value as Objective, opt.label);
-                            else if (msg.step === 'riskTest') handleRisk(opt.value as RiskProfile, opt.label);
-                            else if (msg.step === 'feedback') handleFeedback(opt.value, opt.label);
-                          }}
-                          disabled={step !== msg.step}
-                          className="w-full text-left px-4 py-2.5 text-sm bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl text-teal-800 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Results */}
-                  {msg.results && (
-                    <ResultsPanel
-                      results={msg.results.data.length === results?.data.length ? (results ?? msg.results) : msg.results}
-                      isLoading={isLoading}
-                      onLoadMore={handleLoadMore}
-                      canLoadMore={
-                        !!results &&
-                        results.pagination.page < results.pagination.totalPages &&
-                        msg.results === messages.find(m => m.results)?.results
-                      }
-                      selectedTickers={selectedTickers}
-                      onToggleSelect={toggleSelectTicker}
-                    />
-                  )}
-                </div>
+        {/* ── Idle: text input + examples ── */}
+        {showIdle && (
+          <div className="space-y-4">
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4">
+              <p className="text-sm font-medium text-gray-700 mb-3">What are you looking for in an ETF?</p>
+              <div className="relative">
+                <textarea
+                  ref={textareaRef}
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="e.g. Low-cost broad market ETFs with good 3-year returns and low volatility…"
+                  rows={3}
+                  disabled={mode === 'parsing'}
+                  className="w-full px-4 py-3 pr-12 text-sm border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:opacity-60 disabled:bg-gray-50"
+                />
+                <button
+                  onClick={handleSubmit}
+                  disabled={!query.trim() || mode === 'parsing'}
+                  className="absolute right-3 bottom-3 p-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  {mode === 'parsing'
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Send className="w-4 h-4" />}
+                </button>
               </div>
-            ) : (
-              <div className="max-w-xs bg-teal-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm shadow-sm">
-                <p className="text-sm">{msg.content}</p>
-              </div>
-            )}
-          </div>
-        ))}
+              <p className="text-xs text-gray-400 mt-2">Enter to search · Shift+Enter for new line</p>
+            </div>
 
-        {/* Loading indicator */}
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-teal-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-teal-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-teal-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div>
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Try an example</p>
+              <div className="space-y-2">
+                {EXAMPLE_QUERIES.map(ex => (
+                  <button
+                    key={ex}
+                    onClick={() => { setQuery(ex); setTimeout(() => textareaRef.current?.focus(), 0); }}
+                    disabled={mode === 'parsing'}
+                    className="w-full text-left px-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl text-gray-600 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700 transition-colors disabled:opacity-50"
+                  >
+                    {ex}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
         )}
 
+        {/* ── User query bubble ── */}
+        {showQueryBubble && (
+          <div className="flex justify-end">
+            <div className="max-w-sm bg-teal-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm shadow-sm">
+              <p className="text-sm">{query}</p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Parsing loading ── */}
+        {mode === 'parsing' && <LoadingDots label="Analysing your query…" />}
+
+        {/* ── Confirmation card ── */}
+        {(mode === 'confirming' || mode === 'screening') && parsed && (
+          <ConfirmationCard
+            parsed={parsed}
+            onConfirm={() => runScreener(parsed.request)}
+            onEditConfirm={runScreener}
+          />
+        )}
+
+        {/* ── Screening loading ── */}
+        {mode === 'screening' && <LoadingDots label="Scoring ETFs…" />}
+
+        {/* ── Error ── */}
+        {error && (
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+
+        {/* ── Results ── */}
+        {mode === 'results' && results && (
+          <>
+            {/* Summary */}
+            <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+              <p className="text-sm text-gray-700">{results.diagnosisSummary}</p>
+              <p className="text-xs text-gray-400 mt-1.5 italic">Rankings based on historical data. Not financial advice.</p>
+            </div>
+
+            {/* Active profile */}
+            {activeReq && (
+              <div className="flex items-center gap-2 flex-wrap px-1">
+                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${OBJ_COLOR[activeReq.objective]}`}>
+                  {OBJ_LABEL[activeReq.objective]}
+                </span>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${RISK_COLOR[activeReq.riskProfile]}`}>
+                  {RISK_LABEL[activeReq.riskProfile]} risk
+                </span>
+                {chips(activeReq.constraints).map(c => (
+                  <span key={c} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-md">{c}</span>
+                ))}
+              </div>
+            )}
+
+            {/* Compare bar */}
+            {selected.size >= 2 && (
+              <div className="flex items-center justify-between bg-teal-50 border border-teal-200 rounded-xl px-4 py-2.5">
+                <span className="text-sm text-teal-700 font-medium">{selected.size} ETFs selected</span>
+                <button
+                  onClick={() => router.push(`/compare?tickers=${Array.from(selected).join(',')}`)}
+                  className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                >
+                  Compare ({selected.size}) →
+                </button>
+              </div>
+            )}
+
+            {/* Cards */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs text-gray-500">{results.pagination.total} ETFs matched</span>
+                <span className="text-xs text-gray-400">Sorted by score</span>
+              </div>
+              {results.data.map((item, i) => (
+                <ResultCard key={item.ticker} item={item} rank={i + 1}
+                  isSelected={selected.has(item.ticker)} onToggle={toggleTicker} />
+              ))}
+            </div>
+
+            {/* ── Refinement panel ── */}
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 space-y-3 mt-2">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Refine your results</p>
+
+              {/* Quick chips */}
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { hint: 'too_risky'        as FeedbackHint, label: 'Less risky'      },
+                  { hint: 'too_conservative' as FeedbackHint, label: 'More aggressive' },
+                  { hint: 'too_expensive'    as FeedbackHint, label: 'Lower cost'      },
+                  { hint: 'not_aligned'      as FeedbackHint, label: 'Re-evaluate goal' },
+                ]).map(({ hint, label }) => (
+                  <button
+                    key={hint}
+                    onClick={() => handleFeedbackChip(hint)}
+                    className="px-3 py-1.5 text-xs font-medium bg-gray-100 hover:bg-teal-50 text-gray-600 hover:text-teal-700 border border-transparent hover:border-teal-200 rounded-full transition-colors"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Free-text refinement */}
+              <form onSubmit={handleRefine} className="flex gap-2">
+                <input
+                  type="text"
+                  value={refineText}
+                  onChange={e => setRefineText(e.target.value)}
+                  placeholder="Or describe what you'd change…"
+                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-400"
+                />
+                <button
+                  type="submit"
+                  disabled={!refineText.trim()}
+                  className="p-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </form>
+            </div>
+          </>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
-      {/* Disclaimer */}
+      {/* Footer */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 py-2 px-4 text-center">
         <p className="text-xs text-gray-400">
           Educational tool only. Not financial advice. Past performance does not guarantee future results.

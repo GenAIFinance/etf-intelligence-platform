@@ -7,6 +7,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BarChart3, Home, Search, TrendingUp, Newspaper, Sparkles } from 'lucide-react';  // Added Sparkles
+import { useHeartbeat } from '../hooks/useHeartbeat';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -99,6 +100,7 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  useHeartbeat();
   const [queryClient] = useState(
     () =>
       new QueryClient({

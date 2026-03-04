@@ -1,0 +1,12 @@
+{
+  "mode": "full",
+  "total": 10,
+  "processed": 5259,
+  "succeeded": 5243,
+  "failed": 0,
+  "skipped": 16,
+  "lastProcessedTicker": "ISSB",
+  "failedTickers": [],
+  "startedAt": "2026-03-03T15:11:56.744Z",
+  "lastUpdatedAt": "2026-03-03T16:16:41.838Z"
+}
