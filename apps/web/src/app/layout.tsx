@@ -1,24 +1,65 @@
 'use client';
+// NOTE: 'use client' is intentional here — this layout uses usePathname, useState,
+// and useHeartbeat, all of which require the client runtime. Trade-off: the full
+// layout tree is client-rendered (no RSC shell). Acceptable for an auth-gated
+// personal tool. To optimise later: extract <Navigation> and <ClientProviders>
+// into separate client components and make RootLayout a Server Component.
 
 import './globals.css';
-import { Inter } from 'next/font/google';
+import { Inter, Oxanium, DM_Sans, JetBrains_Mono } from 'next/font/google';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Home, Search, TrendingUp, Newspaper, Sparkles } from 'lucide-react';  // Added Sparkles
+import { BarChart3, Home, Search, Sparkles } from 'lucide-react';
 import { useHeartbeat } from '../hooks/useHeartbeat';
 
-const inter = Inter({ subsets: ['latin'] });
+// ============================================================================
+// FONTS
+// ============================================================================
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+// Used by the AI Screener page (display headings)
+const oxanium = Oxanium({
+  subsets: ['latin'],
+  weight: ['400', '600', '700'],
+  variable: '--font-oxanium',
+  display: 'swap',
+});
+
+// Used by the AI Screener page (body)
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-dm-sans',
+  display: 'swap',
+});
+
+// Used by the AI Screener page (monospace — tickers, numbers)
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '700'],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+});
+
+// ============================================================================
+// NAVIGATION
+// ============================================================================
 
 function Navigation() {
   const pathname = usePathname();
 
   const links = [
-    { href: '/', label: 'Dashboard', icon: Home },
-    { href: '/etfs', label: 'ETF Screener', icon: Search },
-    { href: '/ai-screener', label: 'AI Screener', icon: Sparkles, highlighted: true },  // NEW: AI Screener
-    { href: '/compare', label: 'Compare', icon: BarChart3 },
+    { href: '/',            label: 'Dashboard',   icon: Home    },
+    { href: '/etfs',        label: 'ETF Screener', icon: Search  },
+    { href: '/ai-screener', label: 'AI Screener',  icon: Sparkles, highlighted: true },
+    { href: '/compare',     label: 'Compare',      icon: BarChart3 },
   ];
 
   return (
@@ -36,8 +77,7 @@ function Navigation() {
             {links.map((link) => {
               const Icon = link.icon;
               const isActive = pathname === link.href;
-              
-              // Special styling for AI Screener button
+
               if (link.highlighted) {
                 return (
                   <Link
@@ -45,8 +85,8 @@ function Navigation() {
                     href={link.href}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
                       isActive
-                        ? 'bg-purple-700 text-white'
-                        : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700 shadow-md hover:shadow-lg'
+                        ? 'bg-teal-700 text-white'
+                        : 'bg-gradient-to-r from-teal-600 to-emerald-600 text-white hover:from-teal-700 hover:to-emerald-700 shadow-md hover:shadow-lg'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -54,8 +94,7 @@ function Navigation() {
                   </Link>
                 );
               }
-              
-              // Regular styling for other links
+
               return (
                 <Link
                   key={link.href}
@@ -78,6 +117,10 @@ function Navigation() {
   );
 }
 
+// ============================================================================
+// FOOTER
+// ============================================================================
+
 function Footer() {
   return (
     <footer className="bg-gray-50 border-t border-gray-200 mt-auto">
@@ -95,12 +138,13 @@ function Footer() {
   );
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+// ============================================================================
+// ROOT LAYOUT
+// ============================================================================
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   useHeartbeat();
+
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -114,12 +158,17 @@ export default function RootLayout({
   );
 
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${oxanium.variable} ${dmSans.variable} ${jetbrainsMono.variable}`}>
       <head>
-        {/* Block all search engine indexing - EODHD personal use compliance */}
+        {/* Block all search engine indexing — EODHD personal-use compliance */}
         <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noodp" />
         <meta name="googlebot" content="noindex, nofollow" />
         <meta name="bingbot" content="noindex, nofollow" />
+
+        {/* Viewport — required for responsive layout */}
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+        <title>ETF Intelligence</title>
       </head>
       <body className={`${inter.className} min-h-screen flex flex-col`}>
         <QueryClientProvider client={queryClient}>
