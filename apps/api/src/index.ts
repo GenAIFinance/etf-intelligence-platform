@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { PrismaClient } from '@prisma/client';
 import { aiScreenerRoutes } from './routes/ai-screener';
+import { aiChatRoutes }     from './routes/ai-chat';
 import { etfComparisonRoutes } from './routes/etf-comparison';
 import { rankingsRoutes } from './routes/rankings';
 import { etfRoutes } from './routes/etfs';
@@ -17,9 +18,11 @@ async function startServer() {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
-  // aiScreenerRoutes registers its own full path (/api/ai-screener/nlp)
+  // aiScreenerRoutes + aiChatRoutes register their own full paths (/api/…)
   // — no prefix here to avoid /api/api double-prefix
   await app.register(aiScreenerRoutes);
+  await app.register(aiChatRoutes);
+
   await app.register(etfComparisonRoutes, { prefix: '/api' });
   await app.register(rankingsRoutes,      { prefix: '/api' });
   await app.register(etfRoutes,           { prefix: '/api' });

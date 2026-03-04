@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Home, Search, Sparkles } from 'lucide-react';
+import { BarChart3, BookOpen, Home, Search, Sparkles } from 'lucide-react';
 import { useHeartbeat } from '../hooks/useHeartbeat';
 
 // ============================================================================
@@ -59,7 +59,8 @@ function Navigation() {
     { href: '/',            label: 'Dashboard',   icon: Home    },
     { href: '/etfs',        label: 'ETF Screener', icon: Search  },
     { href: '/ai-screener', label: 'AI Screener',  icon: Sparkles, highlighted: true },
-    { href: '/compare',     label: 'Compare',      icon: BarChart3 },
+    { href: '/compare',   label: 'Compare',      icon: BarChart3 },
+    { href: '/ai-chat',   label: 'Advisor',      icon: BookOpen  },
   ];
 
   return (
