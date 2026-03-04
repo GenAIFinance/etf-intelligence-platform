@@ -9,7 +9,7 @@
 //        → user hits "Run" or "Adjust" → POST /api/screener/screen → results
 //        → refinement bar (chips + free-text) loops back to NLP with previousRequest
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -206,7 +206,7 @@ function ResultCard({ item, rank, isSelected, onToggle }: {
             { label: '3Y Return', value: fmt(item.annualized3Y, 'pct'), cls: returnColor(item.annualized3Y) },
             { label: 'Sharpe',    value: fmt(item.sharpeRatio,  'num'), cls: 'text-gray-800' },
             { label: 'Expense',   value: fmt(item.expenseRatio, 'pct2'), cls: 'text-gray-800' },
-          ] as const).map(m => (
+          ]).map(m => (
             <div key={m.label} className="bg-gray-50 rounded-lg p-2 text-center">
               <div className="text-xs text-gray-400 mb-0.5">{m.label}</div>
               <div className={`text-sm font-semibold ${m.cls}`}>{m.value}</div>
