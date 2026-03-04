@@ -5,7 +5,7 @@ import { aiScreenerRoutes } from './routes/ai-screener';
 import { etfComparisonRoutes } from './routes/etf-comparison';
 import { rankingsRoutes } from './routes/rankings';
 import { etfRoutes } from './routes/etfs';
-import { screenerRoutes } from './routes/screener-route';  // ← Added
+import { screenerRoutes } from './routes/screener-route';
 
 const prisma = new PrismaClient();
 
@@ -17,11 +17,13 @@ async function startServer() {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
-  await app.register(aiScreenerRoutes, { prefix: '/api' });
+  // aiScreenerRoutes registers its own full path (/api/ai-screener/nlp)
+  // — no prefix here to avoid /api/api double-prefix
+  await app.register(aiScreenerRoutes);
   await app.register(etfComparisonRoutes, { prefix: '/api' });
-  await app.register(rankingsRoutes, { prefix: '/api' });
-  await app.register(etfRoutes, { prefix: '/api' });
-  await app.register(screenerRoutes, { prefix: '/api' });  // ← Added
+  await app.register(rankingsRoutes,      { prefix: '/api' });
+  await app.register(etfRoutes,           { prefix: '/api' });
+  await app.register(screenerRoutes,      { prefix: '/api' });
 
   try {
     await app.listen({ port: 3001, host: '0.0.0.0' });
