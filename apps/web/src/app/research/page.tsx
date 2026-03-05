@@ -822,7 +822,7 @@ export default function ResearchPage(): React.ReactElement {
                     {constraintChips(activeReq.constraints).map(c=>(
                       <span key={c} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border border-gray-200">{c}</span>
                     ))}
-                    <button onClick={handleScreenReset}
+                    <button onClick={()=>handleScreenReset(false)}
                       className="ml-auto text-xs text-gray-400 hover:text-gray-600 border border-gray-200 px-2 py-1 rounded-lg transition-colors">
                       New search
                     </button>
