@@ -650,11 +650,11 @@ export default function ResearchPage(): React.ReactElement {
     setMessages(prev=>[...prev, userMsg]);
     setAskInput(''); setAskLoading(true); setAskError(null);
     try {
-      const history:HistoryMsg[] = messages.slice(-8).flatMap(m=>{
-        if(m.role==='user') return [{role:'user' as const, content:m.text}];
-        if(m.response)      return [{role:'assistant' as const, content:JSON.stringify(m.response)}];
-        return [];
-      });
+      const history:HistoryMsg[] = messages.slice(-8).reduce<HistoryMsg[]>((acc, m)=>{
+        if(m.role==='user') acc.push({role:'user', content:m.text});
+        else if(m.response) acc.push({role:'assistant', content:JSON.stringify(m.response)});
+        return acc;
+      },[]);
       const res = await fetch(`${API_URL}/api/ai-chat/query`,{
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({query:trimmedQuery,history}),
