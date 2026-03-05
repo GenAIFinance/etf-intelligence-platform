@@ -142,9 +142,16 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Query must be under 800 characters' });
     }
 
-    const apiKey = process.env.DEEPSEEK_API_KEY;
+    // OpenAI preferred (reliable from Railway). Falls back to DeepSeek if OPENAI_API_KEY not set.
+    const useOpenAI = !!process.env.OPENAI_API_KEY;
+    const apiKey    = useOpenAI ? process.env.OPENAI_API_KEY : process.env.DEEPSEEK_API_KEY;
+    const apiUrl    = useOpenAI
+      ? 'https://api.openai.com/v1/chat/completions'
+      : 'https://api.deepseek.com/v1/chat/completions';
+    const model     = useOpenAI ? 'gpt-4o-mini' : 'deepseek-chat';
+
     if (!apiKey) {
-      fastify.log.error('DEEPSEEK_API_KEY not set');
+      fastify.log.error('No AI API key — set OPENAI_API_KEY or DEEPSEEK_API_KEY in Railway');
       return reply.status(500).send({ error: 'AI service not configured' });
     }
 
@@ -199,13 +206,13 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
       { role: 'user', content: userMessage },
     ];
 
-    // ── Call DeepSeek ─────────────────────────────────────────────────────
+    // ── Call AI provider ──────────────────────────────────────────────────
     try {
       const dsResponse = await axios.post(
-        'https://api.deepseek.com/v1/chat/completions',
+        apiUrl,
         {
-          model:       'deepseek-chat',
-          temperature: 0.3,   // slight creativity for narrative, not fully deterministic
+          model,
+          temperature: 0.3,
           max_tokens:  1200,
           messages,
         },
@@ -214,7 +221,7 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type':  'application/json',
           },
-          timeout: 20_000,
+          timeout: 30_000,
         }
       );
 
