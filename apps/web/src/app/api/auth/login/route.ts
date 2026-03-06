@@ -20,19 +20,20 @@ function supabaseHeaders() {
 }
 
 async function createSession(username: string): Promise<string | null> {
-  const url = `${process.env.SUPABASE_URL}/rest/v1/user_sessions`;
+  const url        = `${process.env.SUPABASE_URL}/rest/v1/user_sessions`;
+  const session_id = crypto.randomUUID(); // generate here so we own the value
+  const now        = new Date().toISOString();
   try {
     const res = await fetch(url, {
       method:  'POST',
       headers: supabaseHeaders(),
-      body:    JSON.stringify({ username }),
+      body:    JSON.stringify({ session_id, username, logged_in_at: now, last_active_at: now }),
     });
     if (!res.ok) {
       console.error('[auth/login] Supabase insert failed:', await res.text());
       return null;
     }
-    const rows = await res.json();
-    return rows?.[0]?.session_id ?? null;
+    return session_id; // return the UUID we generated — no need to parse response
   } catch (err) {
     console.error('[auth/login] Supabase error:', err);
     return null;
