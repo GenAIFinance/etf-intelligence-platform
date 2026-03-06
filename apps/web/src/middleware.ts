@@ -8,7 +8,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { COOKIE_NAME, parseSessionCookie } from './lib/auth';
 
 const LOGIN_PATH   = '/login';
-const API_URL      = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // Routes that bypass the gate
 const PUBLIC_PATHS = [LOGIN_PATH, '/api/auth/login', '/api/auth/heartbeat', '/api/auth/logout'];
@@ -39,15 +38,6 @@ export function middleware(request: NextRequest) {
   }
 
   if (session) {
-    // Ping on page navigations only (not API calls or static assets)
-    // Updates last_active_at so session duration is tracked accurately
-    if (!pathname.startsWith('/api/')) {
-      fetch(`${API_URL}/api/sessions/ping`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: session.sessionId, username: session.username }),
-      }).catch(() => {}); // fire-and-forget — never block the page load
-    }
     return NextResponse.next();
   }
 
