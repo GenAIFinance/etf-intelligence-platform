@@ -1,8 +1,21 @@
+// apps/web/src/lib/api.ts
+
 import axios from 'axios';
 
 const api = axios.create({
-   baseURL: process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/api` : 'http://localhost:3001/api',
+  baseURL: process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/api` : 'http://localhost:3001/api',
   timeout: 30000,
+});
+
+// Attach username to every Railway request so the backend can log activity
+api.interceptors.request.use((config) => {
+  if (typeof document !== 'undefined') {
+    const match = document.cookie.match(/(?:^|;\s*)etf_user=([^;]+)/);
+    if (match) {
+      config.headers['x-username'] = decodeURIComponent(match[1]);
+    }
+  }
+  return config;
 });
 
 // ETF API

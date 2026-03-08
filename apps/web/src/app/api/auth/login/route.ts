@@ -41,8 +41,19 @@ export async function POST(request: NextRequest) {
   const cookieValue = `${username}:${sessionId}`;
 
   const response = NextResponse.json({ authenticated: true, username });
+
+  // Auth cookie — httpOnly, secure
   response.cookies.set(COOKIE_NAME, cookieValue, {
     httpOnly: true,
+    secure:   true,
+    sameSite: 'lax',
+    maxAge:   COOKIE_MAX_AGE,
+    path:     '/',
+  });
+
+  // Username cookie — readable by JS so axios can attach x-username header
+  response.cookies.set('etf_user', username, {
+    httpOnly: false,
     secure:   true,
     sameSite: 'lax',
     maxAge:   COOKIE_MAX_AGE,
