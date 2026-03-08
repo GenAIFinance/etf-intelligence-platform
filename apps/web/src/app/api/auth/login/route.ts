@@ -12,17 +12,21 @@ function supabaseHeaders() {
   };
 }
 
-// Fire-and-forget — never awaited, never blocks login
-function logSession(username: string, session_id: string): void {
+// Awaited but race against a 500ms timeout — login is never blocked long
+async function logSession(username: string, session_id: string): Promise<void> {
   const url = `${process.env.SUPABASE_URL}/rest/v1/user_sessions`;
   const now = new Date().toISOString();
-  fetch(url, {
+
+  const insert = fetch(url, {
     method:  'POST',
     headers: supabaseHeaders(),
     body:    JSON.stringify({ session_id, username, logged_in_at: now, last_active_at: now }),
   }).then(res => {
-    if (!res.ok) res.text().then(t => console.error('[auth/login] session insert failed:', t));
-  }).catch(err => console.error('[auth/login] session insert error:', err));
+    if (!res.ok) res.text().then(t => console.error('[auth/login] insert failed:', t));
+  }).catch(err => console.error('[auth/login] insert error:', err));
+
+  const timeout = new Promise<void>(resolve => setTimeout(resolve, 500));
+  await Promise.race([insert, timeout]);
 }
 
 export function GET(request: NextRequest) {
@@ -59,13 +63,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Incorrect password' }, { status: 401 });
   }
 
-  // Generate session ID here — used in both cookie and Supabase log
-  const sessionId   = crypto.randomUUID();
+  const sessionId = crypto.randomUUID();
+
+  // Await with 500ms timeout — never blocks login more than half a second
+  await logSession(username, sessionId);
+
   const cookieValue = `${username}:${sessionId}`;
-
-  // Log to Supabase — fire and forget, never blocks login
-  logSession(username, sessionId);
-
   const response = NextResponse.json({ authenticated: true, username });
   response.cookies.set(COOKIE_NAME, cookieValue, {
     httpOnly: true,
