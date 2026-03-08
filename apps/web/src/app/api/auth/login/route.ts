@@ -1,14 +1,7 @@
 // apps/web/src/app/api/auth/login/route.ts
-//
-// POST — validate password against USER1_PASSWORD / USER2_PASSWORD,
-//         create session row in Supabase, set cookie "username:sessionId"
-// GET  — check if current cookie is valid (used by login page on mount)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { parseSessionCookie, COOKIE_NAME, COOKIE_MAX_AGE } from '../../../../lib/auth';
-
-// ── Supabase REST helpers ────────────────────────────────────────────────────
-// Uses the service-role key (server-side only — never expose to browser).
 
 function supabaseHeaders() {
   return {
@@ -19,30 +12,19 @@ function supabaseHeaders() {
   };
 }
 
-async function createSession(username: string): Promise<string | null> {
-  const url        = `${process.env.SUPABASE_URL}/rest/v1/user_sessions`;
-  const session_id = crypto.randomUUID(); // generate here so we own the value
-  const now        = new Date().toISOString();
-  try {
-    const res = await fetch(url, {
-      method:  'POST',
-      headers: supabaseHeaders(),
-      body:    JSON.stringify({ session_id, username, logged_in_at: now, last_active_at: now }),
-    });
-    if (!res.ok) {
-      console.error('[auth/login] Supabase insert failed:', await res.text());
-      return null;
-    }
-    return session_id; // return the UUID we generated — no need to parse response
-  } catch (err) {
-    console.error('[auth/login] Supabase error:', err);
-    return null;
-  }
+// Fire-and-forget — never awaited, never blocks login
+function logSession(username: string, session_id: string): void {
+  const url = `${process.env.SUPABASE_URL}/rest/v1/user_sessions`;
+  const now = new Date().toISOString();
+  fetch(url, {
+    method:  'POST',
+    headers: supabaseHeaders(),
+    body:    JSON.stringify({ session_id, username, logged_in_at: now, last_active_at: now }),
+  }).then(res => {
+    if (!res.ok) res.text().then(t => console.error('[auth/login] session insert failed:', t));
+  }).catch(err => console.error('[auth/login] session insert error:', err));
 }
 
-// ── Route handlers ───────────────────────────────────────────────────────────
-
-// GET — check if already authenticated (used by login page on mount)
 export function GET(request: NextRequest) {
   const cookieValue = request.cookies.get(COOKIE_NAME)?.value;
   const session     = parseSessionCookie(cookieValue);
@@ -52,13 +34,11 @@ export function GET(request: NextRequest) {
   return NextResponse.json({ authenticated: false }, { status: 401 });
 }
 
-// POST — validate password, create session, set cookie
 export async function POST(request: NextRequest) {
   const user1Password = process.env.USER1_PASSWORD;
   const user2Password = process.env.USER2_PASSWORD;
 
   if (!user1Password || !user2Password) {
-    console.error('[auth/login] USER1_PASSWORD / USER2_PASSWORD not configured');
     return NextResponse.json({ error: 'Auth not configured' }, { status: 500 });
   }
 
@@ -69,7 +49,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  // Small constant-time delay regardless of outcome
   await new Promise(r => setTimeout(r, 400));
 
   let username: string | null = null;
@@ -80,14 +59,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Incorrect password' }, { status: 401 });
   }
 
-  // Log session to Supabase — failure does not block login
-  const sessionId = await createSession(username);
-  if (!sessionId) {
-    console.warn('[auth/login] Session logging failed — login still proceeding');
-  }
+  // Generate session ID here — used in both cookie and Supabase log
+  const sessionId   = crypto.randomUUID();
+  const cookieValue = `${username}:${sessionId}`;
 
-  // Cookie: "username:sessionId" — sessionId needed for heartbeat updates
-  const cookieValue = `${username}:${sessionId ?? crypto.randomUUID()}`;
+  // Log to Supabase — fire and forget, never blocks login
+  logSession(username, sessionId);
 
   const response = NextResponse.json({ authenticated: true, username });
   response.cookies.set(COOKIE_NAME, cookieValue, {
