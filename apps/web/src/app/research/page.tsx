@@ -603,8 +603,30 @@ export default function ResearchPage(): React.ReactElement {
   const screenRef = useRef<HTMLTextAreaElement>(null);
   const askRef    = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}); },
-    [screenMode, parsed, results, screenErr, messages, askLoading]);
+  // Screener: when results land, scroll to anchor so #1 result is at top of viewport
+  useEffect(()=>{
+    if (screenMode === 'results') {
+      const t = setTimeout(()=>{
+        document.getElementById('screen-results-anchor')?.scrollIntoView({behavior:'smooth', block:'start'});
+      }, 80);
+      return ()=>clearTimeout(t);
+    }
+    // For all other screener state changes (parsing, confirming, error) scroll to bottom
+    if (tab !== 'ask') {
+      const t = setTimeout(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}); }, 80);
+      return ()=>clearTimeout(t);
+    }
+  }, [screenMode, parsed, results, screenErr, tab]);
+
+  // On new assistant message: scroll to top of results (just below input)
+  useEffect(()=>{
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== 'assistant') return;
+    const t = setTimeout(()=>{
+      document.getElementById('ask-results-anchor')?.scrollIntoView({behavior:'smooth', block:'start'});
+    }, 80);
+    return ()=>clearTimeout(t);
+  }, [messages]);
 
   // ── Screener ──────────────────────────────────────────────────────────────
   function toggleTicker(ticker:string) {
@@ -704,36 +726,35 @@ export default function ResearchPage(): React.ReactElement {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-6 pb-16 space-y-5">
 
         {/* ── Two-tab toggle ───────────────────────────────────────────────── */}
-        <div className="bg-white border border-gray-200 rounded-xl p-1 flex gap-1 shadow-sm">
-          {([
-            { key:'screen' as TabMode, label:'Screen ETFs', icon:<Zap           className="w-4 h-4"/> },
-            { key:'ask'    as TabMode, label:'Ask ETF',     icon:<MessageSquare className="w-4 h-4"/> },
-          ]).map(t=>(
-            <button key={t.key} onClick={()=>{ setTab(t.key); if(t.key!=='screen') handleScreenReset(true); }}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                tab===t.key
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}>
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
+          <div className="p-1 flex gap-1">
+            {([
+              { key:'screen' as TabMode, label:'Screen ETFs', icon:<Zap           className="w-4 h-4"/> },
+              { key:'ask'    as TabMode, label:'Ask ETF',     icon:<MessageSquare className="w-4 h-4"/> },
+            ]).map(t=>(
+              <button key={t.key} onClick={()=>{ setTab(t.key); if(t.key!=='screen') handleScreenReset(true); }}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  tab===t.key
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}>
+                {t.icon}
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex px-1 pb-2.5">
+            <span className="flex-1 text-center text-xs text-gray-400">Filter by criteria</span>
+            <span className="flex-1 text-center text-xs text-gray-400">Chat with AI</span>
+          </div>
         </div>
-
-        {/* Tab subtitle */}
-        <p className="text-sm text-gray-500 px-1">
-          {tab==='screen'
-            ? 'Type what you\'re looking for in plain English. AI will extract your parameters and rank ETFs by score.'
-            : 'Ask about macro events, rate decisions, sector themes, or any ETF question. Get expert analysis with ETF context.'}
-        </p>
 
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* SCREEN ETFs TAB                                                   */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         {tab==='screen' && (
           <>
-            {/* Input box — only show when idle */}
+            {/* Input box — idle state only */}
             {screenMode==='idle' && (
               <div className="space-y-3">
                 <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
@@ -773,6 +794,57 @@ export default function ResearchPage(): React.ReactElement {
               </div>
             )}
 
+            {/* Refine box — pinned at top in results mode so user never has to scroll up */}
+            {screenMode==='results' && results && activeReq && (
+              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Refine results</p>
+                  <button onClick={()=>handleScreenReset(false)}
+                    className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 px-2 py-1 rounded-lg transition-colors">
+                    New search
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    {hint:'too_risky' as FeedbackHint,        label:'Less risky'},
+                    {hint:'too_conservative' as FeedbackHint, label:'More aggressive'},
+                    {hint:'too_expensive' as FeedbackHint,    label:'Lower cost'},
+                    {hint:'not_aligned' as FeedbackHint,      label:'Re-evaluate goal'},
+                  ]).map(({hint,label})=>(
+                    <button key={hint} onClick={()=>{
+                      const msg:Record<FeedbackHint,string>={
+                        too_risky:'Make it less risky — prioritize stability and lower volatility',
+                        too_conservative:'Make it more aggressive — I want more upside',
+                        too_expensive:'Lower the cost — reduce expense ratio',
+                        not_aligned:'These results feel misaligned — re-evaluate my goal',
+                      };
+                      setQuery(msg[hint]); void parseQuery(msg[hint],activeReq??undefined,hint);
+                    }} className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-full text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-colors bg-white">
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input type="text" value={refineText}
+                    onChange={(e:React.ChangeEvent<HTMLInputElement>)=>setRefineText(e.target.value)}
+                    onKeyDown={(e:React.KeyboardEvent<HTMLInputElement>)=>{
+                      if(e.key==='Enter'&&refineText.trim()&&activeReq){
+                        const q=refineText.trim(); setRefineText(''); setQuery(q); void parseQuery(q,activeReq);
+                      }
+                    }}
+                    placeholder="Or describe what you'd change…"
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent placeholder:text-gray-300"/>
+                  <button onClick={()=>{
+                    const q=refineText.trim(); if(!q||!activeReq) return;
+                    setRefineText(''); setQuery(q); void parseQuery(q,activeReq);
+                  }} disabled={!refineText.trim()}
+                    className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors">
+                    <Send className="w-4 h-4"/>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* User query bubble */}
             {screenMode!=='idle' && query && (
               <div className="flex justify-end">
@@ -801,9 +873,11 @@ export default function ResearchPage(): React.ReactElement {
               </div>
             )}
 
-            {/* Results */}
+            {/* Results — anchor sits here so scroll lands on #1 result */}
             {screenMode==='results' && results && (
               <>
+                <div id="screen-results-anchor"/>
+
                 {/* Summary */}
                 <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
                   <p className="text-sm text-gray-700">{results.diagnosisSummary}</p>
@@ -822,10 +896,6 @@ export default function ResearchPage(): React.ReactElement {
                     {constraintChips(activeReq.constraints).map(c=>(
                       <span key={c} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border border-gray-200">{c}</span>
                     ))}
-                    <button onClick={()=>handleScreenReset(false)}
-                      className="ml-auto text-xs text-gray-400 hover:text-gray-600 border border-gray-200 px-2 py-1 rounded-lg transition-colors">
-                      New search
-                    </button>
                   </div>
                 )}
 
@@ -853,49 +923,6 @@ export default function ResearchPage(): React.ReactElement {
                       isSelected={selected.has(item.ticker)} onToggle={toggleTicker}/>
                   ))}
                 </div>
-
-                {/* Refinement */}
-                <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-3">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Refine results</p>
-                  <div className="flex flex-wrap gap-2">
-                    {([
-                      {hint:'too_risky' as FeedbackHint,        label:'Less risky'},
-                      {hint:'too_conservative' as FeedbackHint, label:'More aggressive'},
-                      {hint:'too_expensive' as FeedbackHint,    label:'Lower cost'},
-                      {hint:'not_aligned' as FeedbackHint,      label:'Re-evaluate goal'},
-                    ]).map(({hint,label})=>(
-                      <button key={hint} onClick={()=>{
-                        const msg:Record<FeedbackHint,string>={
-                          too_risky:'Make it less risky — prioritize stability and lower volatility',
-                          too_conservative:'Make it more aggressive — I want more upside',
-                          too_expensive:'Lower the cost — reduce expense ratio',
-                          not_aligned:'These results feel misaligned — re-evaluate my goal',
-                        };
-                        setQuery(msg[hint]); void parseQuery(msg[hint],activeReq??undefined,hint);
-                      }} className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-full text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-colors bg-white">
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input type="text" value={refineText}
-                      onChange={(e:React.ChangeEvent<HTMLInputElement>)=>setRefineText(e.target.value)}
-                      onKeyDown={(e:React.KeyboardEvent<HTMLInputElement>)=>{
-                        if(e.key==='Enter'&&refineText.trim()&&activeReq){
-                          const q=refineText.trim(); setRefineText(''); setQuery(q); void parseQuery(q,activeReq);
-                        }
-                      }}
-                      placeholder="Or describe what you'd change…"
-                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent placeholder:text-gray-300"/>
-                    <button onClick={()=>{
-                      const q=refineText.trim(); if(!q||!activeReq) return;
-                      setRefineText(''); setQuery(q); void parseQuery(q,activeReq);
-                    }} disabled={!refineText.trim()}
-                      className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors">
-                      <Send className="w-4 h-4"/>
-                    </button>
-                  </div>
-                </div>
               </>
             )}
           </>
@@ -906,46 +933,7 @@ export default function ResearchPage(): React.ReactElement {
         {/* ══════════════════════════════════════════════════════════════════ */}
         {tab==='ask' && (
           <>
-            {/* Empty state examples */}
-            {messages.length===0 && !askLoading && (
-              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Example questions</p>
-                <div className="space-y-2">
-                  {ASK_EXAMPLES.map(q=>(
-                    <button key={q} onClick={()=>void sendAsk(q)}
-                      className="w-full text-left text-sm text-gray-600 px-4 py-2.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors">
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Message thread */}
-            {messages.map(msg=>(
-              <div key={msg.id}>
-                {msg.role==='user' ? (
-                  <div className="flex justify-end">
-                    <div className="max-w-lg bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm shadow-sm">
-                      <p className="text-sm leading-relaxed">{msg.text}</p>
-                    </div>
-                  </div>
-                ) : msg.response ? (
-                  <AdvisorResponseBlock response={msg.response}/>
-                ) : null}
-              </div>
-            ))}
-
-            {askLoading && <LoadingRow label="Analysing markets…"/>}
-
-            {askError && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5"/>
-                <p className="text-sm text-red-600">{askError}</p>
-              </div>
-            )}
-
-            {/* Ask input */}
+            {/* Ask input — pinned at top so refinement is always reachable */}
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
               <div className="relative">
                 <textarea ref={askRef} value={askInput}
@@ -964,6 +952,48 @@ export default function ResearchPage(): React.ReactElement {
               </div>
               <p className="text-xs text-gray-400 mt-2">↵ Enter to send · Shift+Enter for new line</p>
             </div>
+
+            {/* Scroll anchor — new results appear just below the input */}
+            <div id="ask-results-anchor"/>
+
+            {/* Empty state examples — shown until first message */}
+            {messages.length===0 && !askLoading && (
+              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Example questions</p>
+                <div className="space-y-2">
+                  {ASK_EXAMPLES.map(q=>(
+                    <button key={q} onClick={()=>void sendAsk(q)}
+                      className="w-full text-left text-sm text-gray-600 px-4 py-2.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors">
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {askLoading && <LoadingRow label="Analysing markets…"/>}
+
+            {askError && (
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5"/>
+                <p className="text-sm text-red-600">{askError}</p>
+              </div>
+            )}
+
+            {/* Message thread — results grow downward from anchor */}
+            {messages.map(msg=>(
+              <div key={msg.id}>
+                {msg.role==='user' ? (
+                  <div className="flex justify-end">
+                    <div className="max-w-lg bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm shadow-sm">
+                      <p className="text-sm leading-relaxed">{msg.text}</p>
+                    </div>
+                  </div>
+                ) : msg.response ? (
+                  <AdvisorResponseBlock response={msg.response}/>
+                ) : null}
+              </div>
+            ))}
           </>
         )}
 
