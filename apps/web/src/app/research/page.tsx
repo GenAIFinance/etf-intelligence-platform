@@ -62,7 +62,9 @@ interface AdvisorAvoid { ticker: string; name: string; reasoning: string; altern
 interface AdvisorResponse {
   analysis: { macroView: string; keyRisks: string[]; sentiment: Sentiment; };
   recommendations: AdvisorRec[]; avoid: AdvisorAvoid[];
-  education: Record<string,string>; disclaimer: string;
+  education: Record<string,string>;
+  selectionRationale?: { summary: string; filters: string[]; };
+  disclaimer: string;
 }
 interface ChatMessage { id: string; role: 'user'|'assistant'; text: string; response?: AdvisorResponse; }
 interface HistoryMsg  { role: 'user'|'assistant'; content: string; }
@@ -518,6 +520,24 @@ function AdvisorResponseBlock({ response }: { response: AdvisorResponse }): Reac
 
       {hasRecs && (
         <div className="space-y-2">
+          {/* Selection rationale — explains how AI narrowed from 5,000+ ETFs */}
+          {response.selectionRationale && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 space-y-2">
+              <p className="text-xs text-gray-500 leading-relaxed">
+                <span className="font-semibold text-gray-600">How these were selected: </span>
+                {response.selectionRationale.summary}
+              </p>
+              {response.selectionRationale.filters.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {response.selectionRationale.filters.map((f, i) => (
+                    <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-white border border-gray-200 text-gray-500">
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">ETFs to consider</p>
           {response.recommendations.map(rec=><AdvisorRecCard key={rec.ticker} rec={rec}/>)}
         </div>
