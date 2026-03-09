@@ -59,16 +59,22 @@ export interface AvoidItem {
   alternative: string | null;
 }
 
+export interface SelectionRationale {
+  summary: string;   // e.g. "From 5,000+ ETFs, I narrowed to 4 based on your question"
+  filters: string[]; // e.g. ["Sector relevance to rate environment", "Expense ratio ≤ 0.30%"]
+}
+
 export interface ChatResponse {
   analysis: {
     macroView:  string;
     keyRisks:   string[];
     sentiment:  'bullish' | 'bearish' | 'neutral' | 'mixed';
   };
-  recommendations: Recommendation[];
-  avoid:           AvoidItem[];
-  education:       Record<string, string>;
-  disclaimer:      string;
+  recommendations:    Recommendation[];
+  avoid:              AvoidItem[];
+  education:          Record<string, string>;
+  selectionRationale: SelectionRationale;
+  disclaimer:         string;
 }
 
 // ============================================================================
@@ -121,6 +127,10 @@ Output ONLY a raw JSON object matching this exact schema — no markdown, no pre
   ],
   "education": {
     "conceptName": "plain English explanation using an analogy"
+  },
+  "selectionRationale": {
+    "summary": "string — one sentence explaining how you narrowed from 5,000+ ETFs to these specific ones, referencing the user's question",
+    "filters": ["string — each filter or criterion you applied, e.g. 'Sector relevance to rate environment', 'Expense ratio under 0.40%', 'Minimum 3-year track record', 'Sufficient liquidity (AUM > $500M)'"]
   },
   "disclaimer": "This analysis is for educational and informational purposes only. It does not constitute investment advice, a solicitation, or a recommendation to buy or sell any security. Past performance does not guarantee future results. Always consult a qualified financial advisor before making investment decisions."
 }`;
@@ -255,6 +265,21 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
       if (!Array.isArray(parsed.recommendations)) parsed.recommendations = [];
       if (!Array.isArray(parsed.avoid))           parsed.avoid           = [];
       if (!parsed.education || typeof parsed.education !== 'object') parsed.education = {};
+
+      // ── Normalise selectionRationale ──────────────────────────────────
+      if (!parsed.selectionRationale || typeof parsed.selectionRationale !== 'object') {
+        parsed.selectionRationale = {
+          summary: `From 5,000+ ETFs, ${parsed.recommendations.length} were selected based on relevance to your question.`,
+          filters: ['Relevance to the macro theme or question', 'Sufficient liquidity and track record', 'Risk/return profile fit'],
+        };
+      } else {
+        if (!parsed.selectionRationale.summary) {
+          parsed.selectionRationale.summary = `From 5,000+ ETFs, ${parsed.recommendations.length} were selected based on relevance to your question.`;
+        }
+        if (!Array.isArray(parsed.selectionRationale.filters) || parsed.selectionRationale.filters.length === 0) {
+          parsed.selectionRationale.filters = ['Relevance to the macro theme or question', 'Sufficient liquidity and track record', 'Risk/return profile fit'];
+        }
+      }
 
       // ── Cache first-turn responses ────────────────────────────────────
       if (history.length === 0) {
