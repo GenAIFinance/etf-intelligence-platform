@@ -2,16 +2,15 @@
 
 // login/page.tsx → apps/web/src/app/login/page.tsx
 //
-// Password gate UI — matches platform design system (teal/emerald, Tailwind).
-// On success: sets auth cookie via /api/auth/login, redirects to destination.
-// On failure: shows inline error, no lockout (private use, 1-2 known users).
+// Name-only entry UI — matches platform design system (teal/emerald, Tailwind).
+// On success: sets auth + session cookies via /api/auth/login, redirects to destination.
 //
 // useSearchParams() must be wrapped in <Suspense> in Next.js 14+.
 // LoginForm reads the param; LoginPage is the static shell with the boundary.
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Lock, Eye, EyeOff, TrendingUp } from 'lucide-react';
+import { User, TrendingUp } from 'lucide-react';
 
 // ── Inner component — uses useSearchParams, must be inside <Suspense> ────────
 function LoginForm() {
@@ -19,10 +18,9 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const redirect     = searchParams.get('redirect') || '/';
 
-  const [password, setPassword]     = useState('');
-  const [showPw, setShowPw]         = useState(false);
-  const [error, setError]           = useState('');
-  const [loading, setLoading]       = useState(false);
+  const [name,    setName]    = useState('');
+  const [error,   setError]   = useState('');
+  const [loading, setLoading] = useState(false);
 
   // If already authed (e.g. back-button), skip straight through
   useEffect(() => {
@@ -40,14 +38,15 @@ function LoginForm() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ name }),
       });
 
       if (res.ok) {
         router.replace(redirect);
       } else {
-        setError('Incorrect password. Please try again.');
-        setPassword('');
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || 'Please enter your name.');
+        setName('');
       }
     } catch {
       setError('Something went wrong. Please try again.');
@@ -68,7 +67,7 @@ function LoginForm() {
             <TrendingUp className="w-6 h-6 text-white" />
             <span className="text-white font-bold text-lg">ETF Intelligence</span>
           </div>
-          <p className="text-teal-100 text-sm">Private access — enter password to continue</p>
+          <p className="text-teal-100 text-sm">Enter your name to access the platform</p>
         </div>
 
         {/* Form */}
@@ -76,31 +75,24 @@ function LoginForm() {
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">
-              Password
+              Your name
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                <Lock className="w-4 h-4 text-gray-400" />
+                <User className="w-4 h-4 text-gray-400" />
               </div>
               <input
-                type={showPw ? 'text' : 'password'}
-                value={password}
-                onChange={e => { setPassword(e.target.value); setError(''); }}
-                placeholder="Enter access password"
+                type="text"
+                value={name}
+                onChange={e => { setName(e.target.value); setError(''); }}
+                placeholder="Enter your name"
                 autoFocus
+                autoComplete="off"
                 required
-                className="w-full pl-9 pr-10 py-2.5 text-sm border border-gray-200 rounded-lg
+                className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg
                            focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent
                            placeholder:text-gray-300"
               />
-              <button
-                type="button"
-                onClick={() => setShowPw(v => !v)}
-                className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600"
-                tabIndex={-1}
-              >
-                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
             </div>
           </div>
 
@@ -113,12 +105,12 @@ function LoginForm() {
 
           <button
             type="submit"
-            disabled={loading || !password}
+            disabled={loading || !name.trim()}
             className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300
                        text-white text-sm font-medium rounded-lg transition-colors
                        disabled:cursor-not-allowed"
           >
-            {loading ? 'Verifying…' : 'Access Platform'}
+            {loading ? 'Entering…' : 'Access Platform'}
           </button>
         </form>
       </div>
