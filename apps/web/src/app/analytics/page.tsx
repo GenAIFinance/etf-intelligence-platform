@@ -28,8 +28,8 @@ interface PageStat {
 interface SessionRow {
   username:     string;
   session_id:   string;
-  started_at:   string;
-  last_active:  string;
+  logged_in_at:  string;
+  last_active_at: string;
   duration_sec: number;
 }
 
@@ -141,7 +141,7 @@ export default function AnalyticsPage(): React.ReactElement {
 
       // Sessions
       const sessionData: SessionRow[] = await sbFetch(
-        'user_sessions?select=username,session_id,started_at,last_active,duration_sec&order=started_at.desc&limit=50'
+        'user_sessions?select=username,session_id,logged_in_at,last_active_at,duration_sec&order=logged_in_at.desc&limit=50'
       );
       setSessions(sessionData);
 
@@ -299,8 +299,8 @@ export default function AnalyticsPage(): React.ReactElement {
                     {sessions.map(s => (
                       <tr key={s.session_id} className="hover:bg-gray-50">
                         <td className="py-2.5 pr-4 font-medium text-gray-800">{s.username}</td>
-                        <td className="py-2.5 pr-4 text-gray-500 text-xs">{fmtDate(s.started_at)}</td>
-                        <td className="py-2.5 pr-4 text-gray-500 text-xs">{fmtDate(s.last_active)}</td>
+                        <td className="py-2.5 pr-4 text-gray-500 text-xs">{fmtDate(s.logged_in_at)}</td>
+                        <td className="py-2.5 pr-4 text-gray-500 text-xs">{fmtDate(s.last_active_at)}</td>
                         <td className="py-2.5 text-right font-medium text-blue-600">{fmtDuration(s.duration_sec || 0)}</td>
                       </tr>
                     ))}
@@ -357,7 +357,7 @@ export default function AnalyticsPage(): React.ReactElement {
               { label: 'Activity by user', sql: `SELECT username, COUNT(*) AS visits, COUNT(DISTINCT DATE(accessed_at)) AS days_active, MAX(accessed_at) AS last_seen FROM user_activity GROUP BY username ORDER BY visits DESC;` },
               { label: 'Visits this week', sql: `SELECT username, COUNT(*) AS visits FROM user_activity WHERE accessed_at > NOW() - INTERVAL '7 days' GROUP BY username ORDER BY visits DESC;` },
               { label: 'Most visited pages', sql: `SELECT path, COUNT(*) AS hits, COUNT(DISTINCT username) AS unique_users FROM user_activity GROUP BY path ORDER BY hits DESC LIMIT 20;` },
-              { label: 'Session durations', sql: `SELECT username, session_id, started_at, last_active, duration_sec FROM user_sessions ORDER BY started_at DESC LIMIT 50;` },
+              { label: 'Session durations', sql: `SELECT username, session_id, logged_in_at, last_active_at, duration_sec FROM user_sessions ORDER BY logged_in_at DESC LIMIT 50;` },
               { label: 'Recent events', sql: `SELECT username, event_type, event_data, occurred_at FROM user_events ORDER BY occurred_at DESC LIMIT 100;` },
             ].map(q => (
               <details key={q.label} className="border border-gray-100 rounded-lg">

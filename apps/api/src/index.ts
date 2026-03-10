@@ -54,8 +54,8 @@ async function logSession(username: string, sessionId: string): Promise<void> {
       body: JSON.stringify({
         username,
         session_id:  sessionId,
-        started_at:  now,
-        last_active: now,
+        logged_in_at:  now,
+        last_active_at: now,
         duration_sec: 0,
       }),
     });
@@ -71,7 +71,7 @@ async function logSession(username: string, sessionId: string): Promise<void> {
             'apikey':        SUPABASE_KEY,
             'Authorization': `Bearer ${SUPABASE_KEY}`,
           },
-          body: JSON.stringify({ last_active: now }),
+          body: JSON.stringify({ last_active_at: now }),
         }
       );
     }
