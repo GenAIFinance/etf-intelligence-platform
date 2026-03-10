@@ -13,30 +13,22 @@ export function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const user1Password = process.env.USER1_PASSWORD;
-  const user2Password = process.env.USER2_PASSWORD;
-
-  if (!user1Password || !user2Password) {
-    return NextResponse.json({ error: 'Auth not configured' }, { status: 500 });
-  }
-
-  let body: { password?: string };
+  let body: { name?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  await new Promise(r => setTimeout(r, 400));
-
-  let username: string | null = null;
-  if (body.password === user1Password)      username = 'user1';
-  else if (body.password === user2Password) username = 'user2';
-
-  if (!username) {
-    return NextResponse.json({ error: 'Incorrect password' }, { status: 401 });
+  const name = body.name?.trim();
+  if (!name || name.length < 1) {
+    return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+  }
+  if (name.length > 50) {
+    return NextResponse.json({ error: 'Name must be under 50 characters' }, { status: 400 });
   }
 
+  const username    = name;
   const sessionId   = crypto.randomUUID();
   const cookieValue = `${username}:${sessionId}`;
 
@@ -53,6 +45,15 @@ export async function POST(request: NextRequest) {
 
   // Username cookie — readable by JS so axios can attach x-username header
   response.cookies.set('etf_user', username, {
+    httpOnly: false,
+    secure:   true,
+    sameSite: 'lax',
+    maxAge:   COOKIE_MAX_AGE,
+    path:     '/',
+  });
+
+  // Session ID cookie — readable by JS for session tracking
+  response.cookies.set('etf_session', sessionId, {
     httpOnly: false,
     secure:   true,
     sameSite: 'lax',

@@ -7,16 +7,41 @@ const api = axios.create({
   timeout: 30000,
 });
 
-// Attach username to every Railway request so the backend can log activity
+// Attach username + session ID to every Railway request for activity tracking
 api.interceptors.request.use((config) => {
   if (typeof document !== 'undefined') {
-    const match = document.cookie.match(/(?:^|;\s*)etf_user=([^;]+)/);
-    if (match) {
-      config.headers['x-username'] = decodeURIComponent(match[1]);
-    }
+    const userMatch    = document.cookie.match(/(?:^|;\s*)etf_user=([^;]+)/);
+    const sessionMatch = document.cookie.match(/(?:^|;\s*)etf_session=([^;]+)/);
+    if (userMatch)    config.headers['x-username']   = decodeURIComponent(userMatch[1]);
+    if (sessionMatch) config.headers['x-session-id'] = decodeURIComponent(sessionMatch[1]);
   }
   return config;
 });
+
+// ── Event tracker ─────────────────────────────────────────────────────────
+// Call this from anywhere in the frontend to log a user interaction.
+// eventType examples: 'etf_view', 'screener_run', 'ask_etf', 'compare', 'tab_switch'
+
+export function trackEvent(eventType: string, eventData: Record<string, unknown> = {}): void {
+  if (typeof document === 'undefined') return;
+  const userMatch    = document.cookie.match(/(?:^|;\s*)etf_user=([^;]+)/);
+  const sessionMatch = document.cookie.match(/(?:^|;\s*)etf_session=([^;]+)/);
+  if (!userMatch || !sessionMatch) return;
+
+  const username  = decodeURIComponent(userMatch[1]);
+  const sessionId = decodeURIComponent(sessionMatch[1]);
+
+  // Fire-and-forget — never blocks UI
+  fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/api/events`, {
+    method:  'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'x-username':    username,
+      'x-session-id':  sessionId,
+    },
+    body: JSON.stringify({ eventType, eventData }),
+  }).catch(() => { /* silent */ });
+}
 
 // ETF API
 export const etfApi = {

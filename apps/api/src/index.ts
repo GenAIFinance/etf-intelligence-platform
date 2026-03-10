@@ -13,16 +13,14 @@ import { sessionRoutes }       from './routes/sessions';
 
 const prisma = new PrismaClient();
 
-// ── Supabase activity logger ─────────────────────────────────────────────────
-// Called on every Railway request that has an x-username header.
-// Runs after response is sent — never blocks the API call.
+const SUPABASE_URL = process.env.SUPABASE_URL ?? '';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 
-const SUPABASE_URL      = process.env.SUPABASE_URL ?? '';
-const SUPABASE_KEY      = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+// ── Activity logger ──────────────────────────────────────────────────────────
+// Logs every page/API visit to user_activity. Fire-and-forget.
 
 async function logActivity(username: string, path: string): Promise<void> {
   if (!SUPABASE_URL || !SUPABASE_KEY) return;
-  const now = new Date().toISOString();
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/user_activity`, {
       method:  'POST',
@@ -31,11 +29,82 @@ async function logActivity(username: string, path: string): Promise<void> {
         'apikey':        SUPABASE_KEY,
         'Authorization': `Bearer ${SUPABASE_KEY}`,
       },
-      body: JSON.stringify({ username, path, accessed_at: now }),
+      body: JSON.stringify({ username, path, accessed_at: new Date().toISOString() }),
     });
-  } catch {
-    // silent — never affect API response
-  }
+  } catch { /* silent */ }
+}
+
+// ── Session tracker ──────────────────────────────────────────────────────────
+// Upserts a session row — creates on first ping, updates last_active + duration
+// on every subsequent request. Duration = seconds since session started.
+
+async function logSession(username: string, sessionId: string): Promise<void> {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
+  const now = new Date().toISOString();
+  try {
+    // Try insert first (new session)
+    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/user_sessions`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'apikey':        SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Prefer':        'resolution=ignore-duplicates',
+      },
+      body: JSON.stringify({
+        username,
+        session_id:  sessionId,
+        started_at:  now,
+        last_active: now,
+        duration_sec: 0,
+      }),
+    });
+
+    if (insertRes.status === 409 || insertRes.status === 200 || insertRes.status === 201) {
+      // Update last_active and recalculate duration
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/user_sessions?session_id=eq.${encodeURIComponent(sessionId)}`,
+        {
+          method:  'PATCH',
+          headers: {
+            'Content-Type':  'application/json',
+            'apikey':        SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+          },
+          body: JSON.stringify({ last_active: now }),
+        }
+      );
+    }
+  } catch { /* silent */ }
+}
+
+// ── Event logger ─────────────────────────────────────────────────────────────
+// Stores a single user interaction event (click, search, tab switch etc.)
+
+async function logEvent(
+  username: string,
+  sessionId: string,
+  eventType: string,
+  eventData: Record<string, unknown>
+): Promise<void> {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/user_events`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'apikey':        SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+      },
+      body: JSON.stringify({
+        username,
+        session_id:  sessionId,
+        event_type:  eventType,
+        event_data:  eventData,
+        occurred_at: new Date().toISOString(),
+      }),
+    });
+  } catch { /* silent */ }
 }
 
 async function startServer() {
@@ -46,13 +115,38 @@ async function startServer() {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
-  // Log activity on every request that has x-username header
+  // ── Log activity + session on every request with x-username ─────────────
   app.addHook('onResponse', async (request) => {
-    const username = request.headers['x-username'];
+    const username  = request.headers['x-username'];
+    const sessionId = request.headers['x-session-id'];
     if (username && typeof username === 'string') {
       const path = request.routeOptions?.url ?? request.url;
-      logActivity(username, path); // intentionally not awaited — fire after response
+      logActivity(username, path);
+      if (sessionId && typeof sessionId === 'string') {
+        logSession(username, sessionId);
+      }
     }
+  });
+
+  // ── Event ingestion endpoint ─────────────────────────────────────────────
+  // Frontend calls POST /api/events to log clicks and interactions.
+  app.post<{
+    Body: { eventType: string; eventData?: Record<string, unknown> }
+  }>('/api/events', async (request, reply) => {
+    const username  = request.headers['x-username'];
+    const sessionId = request.headers['x-session-id'];
+    if (!username || typeof username !== 'string') {
+      return reply.status(401).send({ error: 'x-username header required' });
+    }
+    if (!sessionId || typeof sessionId !== 'string') {
+      return reply.status(400).send({ error: 'x-session-id header required' });
+    }
+    const { eventType, eventData = {} } = request.body ?? {};
+    if (!eventType) {
+      return reply.status(400).send({ error: 'eventType is required' });
+    }
+    logEvent(username, sessionId, eventType, eventData); // fire-and-forget
+    return reply.status(204).send();
   });
 
   await app.register(aiScreenerRoutes);

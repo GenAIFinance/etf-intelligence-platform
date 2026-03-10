@@ -1,8 +1,7 @@
 // middleware.ts → apps/web/src/middleware.ts
 //
-// Password gate for personal-use EODHD compliance.
-// Supports two named users (user1 / user2) with separate passwords.
-// Cookie stores "username:sessionId" — not the password itself.
+// Name-only gate for personal-use EODHD compliance.
+// Cookie stores "username:sessionId" — set on login.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { COOKIE_NAME, parseSessionCookie } from './lib/auth';
@@ -27,15 +26,6 @@ export function middleware(request: NextRequest) {
 
   const cookieValue = request.cookies.get(COOKIE_NAME)?.value;
   const session     = parseSessionCookie(cookieValue);
-
-  // Fail open in dev if no passwords configured, fail closed in prod
-  if (!process.env.USER1_PASSWORD || !process.env.USER2_PASSWORD) {
-    if (process.env.NODE_ENV === 'production') {
-      console.error('[middleware] USER1_PASSWORD / USER2_PASSWORD not set — blocking access');
-      return NextResponse.redirect(new URL(LOGIN_PATH, request.url));
-    }
-    return NextResponse.next();
-  }
 
   if (session) {
     return NextResponse.next();
