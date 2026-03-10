@@ -50,22 +50,22 @@ import {
 type TabId = 'overview' | 'performance' | 'holdings' | 'themes' | 'news';
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
-  { id: 'overview', label: 'Overview', icon: Info },
-  { id: 'performance', label: 'Performance', icon: TrendingUp },
-  { id: 'holdings', label: 'Holdings', icon: Layers },
-  { id: 'themes', label: 'Themes', icon: PieChart },
-  { id: 'news', label: 'News Impact', icon: Newspaper },
+  { id: 'performance', label: 'Performance',  icon: TrendingUp },
+  { id: 'themes',      label: 'Themes',       icon: PieChart   },
+  { id: 'overview',    label: 'Basic Info',   icon: Info       },
+  { id: 'holdings',    label: 'Holdings',     icon: Layers     },
+  { id: 'news',        label: 'News Impact',  icon: Newspaper  },
 ];
 
 export default function EtfDetailPage() {
   const params = useParams();
   const ticker = (params.ticker as string).toUpperCase();
-  const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const [activeTab, setActiveTab] = useState<TabId>('performance');
   const [priceRange, setPriceRange] = useState('1y');
 
   const { data: etf, isLoading: etfLoading, error: etfError } = useEtf(ticker);
   const { data: holdings } = useEtfHoldings(ticker);
-  const { data: prices } = useEtfPrices(ticker, priceRange);
+  const { data: prices, isLoading: pricesLoading } = useEtfPrices(ticker, priceRange);
   const { data: metrics } = useEtfMetrics(ticker);
   const { data: themes } = useEtfThemesExposure(ticker);
   const { data: impact } = useEtfImpact(ticker);
@@ -103,6 +103,11 @@ export default function EtfDetailPage() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <h1 className="text-3xl font-bold text-gray-900">{ticker}</h1>
+                {etf?.aum && (
+                  <span className="text-sm font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
+                    AUM {formatCurrency(etf.aum)}
+                  </span>
+                )}
                 {etf?.assetClass && (
                   <span className="badge badge-blue">{etf.assetClass}</span>
                 )}
@@ -514,9 +519,13 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
         </div>
         {(() => {
           const priceArr = Array.isArray(prices) ? prices : prices?.prices;
-          return priceArr?.length > 0
-            ? <PriceChart data={priceArr} range={priceRange} />
-            : <ChartSkeleton />;
+          if (pricesLoading) return <ChartSkeleton />;
+          if (!priceArr || priceArr.length === 0) return (
+            <div className="flex items-center justify-center h-48 text-sm text-gray-400">
+              No price data available for this range
+            </div>
+          );
+          return <PriceChart data={priceArr} range={priceRange} />;
         })()}
       </div>
 
