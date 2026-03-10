@@ -65,7 +65,7 @@ export default function EtfDetailPage() {
 
   const { data: etf, isLoading: etfLoading, error: etfError } = useEtf(ticker);
   const { data: holdings } = useEtfHoldings(ticker);
-  const { data: prices, isLoading: pricesLoading } = useEtfPrices(ticker, priceRange);
+  const { data: prices } = useEtfPrices(ticker, priceRange);
   const { data: metrics } = useEtfMetrics(ticker);
   const { data: themes } = useEtfThemesExposure(ticker);
   const { data: impact } = useEtfImpact(ticker);
@@ -519,13 +519,9 @@ function PerformanceTab({ ticker, etf, prices, metrics, priceRange, setPriceRang
         </div>
         {(() => {
           const priceArr = Array.isArray(prices) ? prices : prices?.prices;
-          if (pricesLoading) return <ChartSkeleton />;
-          if (!priceArr || priceArr.length === 0) return (
-            <div className="flex items-center justify-center h-48 text-sm text-gray-400">
-              No price data available for this range
-            </div>
-          );
-          return <PriceChart data={priceArr} range={priceRange} />;
+          return priceArr?.length > 0
+            ? <PriceChart data={priceArr} range={priceRange} />
+            : <ChartSkeleton />;
         })()}
       </div>
 
