@@ -611,6 +611,8 @@ export default function ResearchPage(): React.ReactElement {
   const [results,    setResults]    = useState<ScreenerResponse|null>(null);
   const [screenErr,  setScreenErr]  = useState<string|null>(null);
   const [selected,   setSelected]   = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   // Advisor state
   const [messages,   setMessages]   = useState<ChatMessage[]>([]);
@@ -675,13 +677,13 @@ export default function ResearchPage(): React.ReactElement {
       });
       if(!res.ok) throw new Error(`Screener error ${res.status}`);
       const data=await res.json() as ScreenerResponse;
-      setResults(data); setScreenMode('results');
+      setResults(data); setScreenMode('results'); setCurrentPage(1);
     } catch(err){ setScreenErr(err instanceof Error?err.message:'Failed to run screener'); setScreenMode('confirming'); }
   },[]);
 
   function handleScreenReset(skipFocus = false) {
     setScreenMode('idle'); setQuery(''); setRefineText('');
-    setParsed(null); setActiveReq(null); setResults(null); setScreenErr(null); setSelected(new Set());
+    setParsed(null); setActiveReq(null); setResults(null); setScreenErr(null); setSelected(new Set()); setCurrentPage(1);
     if (!skipFocus) setTimeout(()=>screenRef.current?.focus(), 100);
   }
 
@@ -936,13 +938,43 @@ export default function ResearchPage(): React.ReactElement {
                   <span>Sorted by score · Select up to 15 to compare</span>
                 </div>
 
-                {/* Result cards */}
-                <div className="space-y-3">
-                  {results.data.map((item,i)=>(
-                    <ResultCard key={item.ticker} item={item} rank={i+1}
-                      isSelected={selected.has(item.ticker)} onToggle={toggleTicker}/>
-                  ))}
-                </div>
+                {/* Result cards — paginated 20 per page */}
+                {(() => {
+                  const allData = results.data;
+                  const totalPages = Math.ceil(allData.length / PAGE_SIZE);
+                  const pageData = allData.slice((currentPage-1)*PAGE_SIZE, currentPage*PAGE_SIZE);
+                  return (
+                    <>
+                      <div className="space-y-3">
+                        {pageData.map((item,i)=>(
+                          <ResultCard key={item.ticker} item={item} rank={(currentPage-1)*PAGE_SIZE+i+1}
+                            isSelected={selected.has(item.ticker)} onToggle={toggleTicker}/>
+                        ))}
+                      </div>
+
+                      {/* Pagination controls */}
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-between pt-2">
+                          <button
+                            onClick={()=>{ setCurrentPage(p=>p-1); document.getElementById('screen-results-anchor')?.scrollIntoView({behavior:'smooth',block:'start'}); }}
+                            disabled={currentPage===1}
+                            className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                            ← Previous
+                          </button>
+                          <span className="text-xs text-gray-400">
+                            Page {currentPage} of {totalPages} · {allData.length} ETFs
+                          </span>
+                          <button
+                            onClick={()=>{ setCurrentPage(p=>p+1); document.getElementById('screen-results-anchor')?.scrollIntoView({behavior:'smooth',block:'start'}); }}
+                            disabled={currentPage===totalPages}
+                            className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                            Next →
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </>
             )}
           </>

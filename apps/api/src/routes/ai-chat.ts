@@ -223,7 +223,7 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
         {
           model,
           temperature: 0.3,
-          max_tokens:  1200,
+          max_tokens:  2500,
           messages,
         },
         {
@@ -246,10 +246,30 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
       try {
         parsed = JSON.parse(jsonText);
       } catch {
-        fastify.log.error({ rawText }, 'ai-chat: JSON parse failed');
-        return reply.status(422).send({
-          error: 'Could not parse response — try rephrasing your question',
-        });
+        // Try to extract the largest valid JSON object from the response
+        // (handles truncated responses where the AI ran out of tokens)
+        const match = jsonText.match(/\{[\s\S]*/);
+        if (match) {
+          let attempt = match[0];
+          // Try progressively closing open braces/arrays until it parses
+          for (let i = 0; i < 5; i++) {
+            try {
+              parsed = JSON.parse(attempt);
+              break;
+            } catch {
+              // Count unclosed braces and arrays and close them
+              const opens  = (attempt.match(/\{/g) || []).length - (attempt.match(/\}/g) || []).length;
+              const arrOpen = (attempt.match(/\[/g) || []).length - (attempt.match(/\]/g) || []).length;
+              attempt += ']'.repeat(Math.max(0, arrOpen)) + '}'.repeat(Math.max(0, opens));
+            }
+          }
+        }
+        if (!parsed!) {
+          fastify.log.error({ rawText }, 'ai-chat: JSON parse failed after recovery attempts');
+          return reply.status(422).send({
+            error: 'Could not parse response — try rephrasing your question',
+          });
+        }
       }
 
       // ── Ensure disclaimer is always present ───────────────────────────
