@@ -12,7 +12,7 @@
 import { FastifyInstance } from 'fastify';
 import axios, { AxiosError } from 'axios';
 import { cacheGet, cacheSet, makeCacheKey } from '../lib/cache';
-import { getEtfContext } from '../services/etf-context';
+import { getEtfContext, getEtfMetricsByTickers } from '../services/etf-context';
 
 // ============================================================================
 // TYPES
@@ -90,7 +90,7 @@ When responding:
 - Always include risk factors and alternative scenarios.
 - Never recommend a specific allocation percentage greater than 25% in a single ETF.
 - Only reference ETFs from the provided database list when making recommendations.
-- CRITICAL: For all metrics fields (return1M, return3M, volatility, sharpe, maxDrawdown), you MUST copy the exact values from the database context provided. If a value is not provided or shown as N/A, set it to null. NEVER invent, estimate, or fabricate any metric values — null is always better than a wrong number.
+- For all metrics fields (return1M, return3M, volatility, sharpe, maxDrawdown), always set them to null — real values will be injected from the database automatically.
 
 CRITICAL: You must always include a disclaimer field reminding users this is not investment advice.
 
@@ -288,17 +288,17 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
       if (!Array.isArray(parsed.avoid))           parsed.avoid           = [];
       if (!parsed.education || typeof parsed.education !== 'object') parsed.education = {};
 
-      // ── Sanitise metrics — null out hallucinated values ───────────────
-      // Real ETF returns are typically -50% to +50% monthly/quarterly.
-      // Volatility is typically 1%-60% annualised. MaxDrawdown is -1% to -70%.
-      for (const rec of parsed.recommendations) {
-        const m = rec.metrics;
-        if (!m) { rec.metrics = { return1M: null, return3M: null, volatility: null, sharpe: null, maxDrawdown: null }; continue; }
-        if (m.return1M   != null && (Math.abs(m.return1M)   > 0.5))  m.return1M   = null;
-        if (m.return3M   != null && (Math.abs(m.return3M)   > 1.0))  m.return3M   = null;
-        if (m.volatility != null && (m.volatility < 0 || m.volatility > 1.5)) m.volatility = null;
-        if (m.sharpe     != null && (Math.abs(m.sharpe)     > 10))   m.sharpe     = null;
-        if (m.maxDrawdown != null && (m.maxDrawdown > 0 || m.maxDrawdown < -1)) m.maxDrawdown = null;
+      // ── Inject real metrics from DB — overwrite whatever AI returned ──
+      // AI only picks tickers; all numbers come from EtfMetricSnapshot.
+      if (parsed.recommendations.length > 0) {
+        const tickers = parsed.recommendations.map(r => r.ticker);
+        const metricsMap = await getEtfMetricsByTickers(tickers);
+        for (const rec of parsed.recommendations) {
+          const real = metricsMap.get(rec.ticker);
+          rec.metrics = real
+            ? { return1M: real.return1M, return3M: real.return3M, volatility: real.volatility, sharpe: real.sharpe, maxDrawdown: real.maxDrawdown }
+            : { return1M: null, return3M: null, volatility: null, sharpe: null, maxDrawdown: null };
+        }
       }
 
       // ── Normalise selectionRationale ──────────────────────────────────

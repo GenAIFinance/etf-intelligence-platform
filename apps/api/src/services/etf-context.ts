@@ -16,7 +16,7 @@ const prisma = new PrismaClient();
 
 const THEME_KEYWORDS: Record<string, string[]> = {
   AI:             ['ai', 'artificial intelligence', 'machine learning', 'robot'],
-  Defense:        ['defense', 'defence', 'military', 'aerospace', 'aero'],
+  Defense:        ['defense', 'defence', 'military', 'aerospace', 'aero', 'geopolitical', 'geopolitics', 'war', 'conflict', 'nato', 'tension'],
   Cybersecurity:  ['cyber', 'security', 'hack'],
   Energy:         ['energy', 'oil', 'gas', 'petroleum'],
   Gold:           ['gold', 'precious metal', 'silver'],
@@ -25,10 +25,10 @@ const THEME_KEYWORDS: Record<string, string[]> = {
   Quantum:        ['quantum'],
   RareEarths:     ['rare earth', 'lithium', 'material'],
   Dividends:      ['dividend', 'income', 'yield'],
-  LowVolatility:  ['low volatility', 'low vol', 'stable', 'conservative'],
-  BroadMarket:    ['s&p', 'sp500', 'broad market', 'index', 'total market'],
-  Bonds:          ['bond', 'fixed income', 'treasury', 'credit'],
-  International:  ['international', 'global', 'emerging market', 'foreign'],
+  LowVolatility:  ['low volatility', 'low vol', 'stable', 'conservative', 'defensive', 'preservation'],
+  BroadMarket:    ['s&p', 'sp500', 'broad market', 'index', 'total market', 'recommend', 'suggest', 'best etf'],
+  Bonds:          ['bond', 'fixed income', 'treasury', 'credit', 'rate', 'fed', 'inflation', 'tips'],
+  International:  ['international', 'global', 'emerging market', 'foreign', 'china', 'europe', 'japan'],
   RealEstate:     ['real estate', 'reit', 'property'],
 };
 
@@ -127,10 +127,87 @@ export async function getEtfContext(query: string): Promise<EtfContextRow[]> {
     LIMIT 20
   `;
 
-  return formatRows(rows);
+  // 3. Final fallback — return top diversified ETFs by AUM so AI always has real metrics
+  const fallbackRows = await prisma.$queryRaw<RawEtfRow[]>`
+    SELECT
+      e.ticker,
+      e.name,
+      e.themes,
+      s."return1M"     AS return_1m,
+      s."return3M"     AS return_3m,
+      s.volatility,
+      s.sharpe,
+      s."maxDrawdown"  AS max_drawdown
+    FROM "Etf" e
+    LEFT JOIN LATERAL (
+      SELECT "return1M", "return3M", volatility, sharpe, "maxDrawdown"
+      FROM   "EtfMetricSnapshot"
+      WHERE  "etfId" = e.id
+      ORDER  BY "asOfDate" DESC
+      LIMIT  1
+    ) s ON true
+    WHERE e.aum > 1000000000
+    ORDER BY e.aum DESC
+    LIMIT 20
+  `;
+
+  return formatRows(fallbackRows);
 }
 
-// ── Helper ────────────────────────────────────────────────────────────────────
+// ── Fetch real metrics for specific tickers ───────────────────────────────────
+// Called after AI recommends tickers — overwrites AI metrics with real DB values
+
+export interface EtfRealMetrics {
+  ticker:      string;
+  return1M:    number | null;
+  return3M:    number | null;
+  volatility:  number | null;
+  sharpe:      number | null;
+  maxDrawdown: number | null;
+}
+
+interface RawMetricsRow {
+  ticker:       string;
+  return_1m:    number | null;
+  return_3m:    number | null;
+  volatility:   number | null;
+  sharpe:       number | null;
+  max_drawdown: number | null;
+}
+
+export async function getEtfMetricsByTickers(tickers: string[]): Promise<Map<string, EtfRealMetrics>> {
+  if (!tickers.length) return new Map();
+  const rows = await prisma.$queryRaw<RawMetricsRow[]>`
+    SELECT
+      e.ticker,
+      s."return1M"    AS return_1m,
+      s."return3M"    AS return_3m,
+      s.volatility,
+      s.sharpe,
+      s."maxDrawdown" AS max_drawdown
+    FROM "Etf" e
+    LEFT JOIN LATERAL (
+      SELECT "return1M", "return3M", volatility, sharpe, "maxDrawdown"
+      FROM   "EtfMetricSnapshot"
+      WHERE  "etfId" = e.id
+      ORDER  BY "asOfDate" DESC
+      LIMIT  1
+    ) s ON true
+    WHERE e.ticker = ANY(${tickers}::text[])
+  `;
+  const map = new Map<string, EtfRealMetrics>();
+  for (const r of rows) {
+    map.set(r.ticker, {
+      ticker:      r.ticker,
+      return1M:    r.return_1m    ?? null,
+      return3M:    r.return_3m    ?? null,
+      volatility:  r.volatility   ?? null,
+      sharpe:      r.sharpe       ?? null,
+      maxDrawdown: r.max_drawdown ?? null,
+    });
+  }
+  return map;
+}
 
 function formatRows(rows: RawEtfRow[]): EtfContextRow[] {
   return rows.map(r => ({
