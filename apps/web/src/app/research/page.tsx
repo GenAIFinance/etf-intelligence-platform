@@ -56,7 +56,7 @@ interface ScreenerResponse {
   diagnosisSummary: string;
 }
 
-interface AdvisorMetrics { return3Y: number|null; volatility: number|null; sharpe: number|null; expenseRatio: number|null; dividendYield: number|null; }
+interface AdvisorMetrics { return1M: number|null; return3M: number|null; volatility: number|null; sharpe: number|null; maxDrawdown: number|null; }
 interface AdvisorRec { ticker: string; name: string; allocation: number|null; reasoning: string; risks: string; profile: string[]; metrics: AdvisorMetrics; }
 interface AdvisorAvoid { ticker: string; name: string; reasoning: string; alternative: string|null; }
 interface AdvisorResponse {
@@ -434,12 +434,13 @@ function AdvisorRecCard({ rec }: { rec: AdvisorRec }): React.ReactElement {
         </div>
         <p className="text-xs text-gray-400 mb-2 truncate">{rec.name}</p>
         <p className="text-sm text-gray-700 leading-relaxed mb-3">{rec.reasoning}</p>
-        <div className="grid grid-cols-4 gap-2 mb-3">
+        <div className="grid grid-cols-5 gap-2 mb-3">
           {[
-            {label:'3Y',  value:fmt(rec.metrics.return3Y,'pct'),    cls:returnCls(rec.metrics.return3Y)},
-            {label:'Vol', value:fmt(rec.metrics.volatility,'pct2'), cls:'text-gray-600'},
-            {label:'SR',  value:fmt(rec.metrics.sharpe,'num'),      cls:'text-gray-600'},
-            {label:'ER',  value:fmt(rec.metrics.expenseRatio,'pct2'),cls:'text-gray-600'},
+            {label:'1M',     value:fmt(rec.metrics.return1M,'pct'),     cls:returnCls(rec.metrics.return1M)},
+            {label:'3M',     value:fmt(rec.metrics.return3M,'pct'),     cls:returnCls(rec.metrics.return3M)},
+            {label:'Vol',    value:fmt(rec.metrics.volatility,'pct2'),  cls:'text-gray-600'},
+            {label:'SR',     value:fmt(rec.metrics.sharpe,'num'),       cls:'text-gray-600'},
+            {label:'MaxDD',  value:fmt(rec.metrics.maxDrawdown,'pct2'), cls:returnCls(rec.metrics.maxDrawdown)},
           ].map(m=>(
             <div key={m.label} className="bg-gray-50 border border-gray-100 rounded-lg p-2 text-center">
               <div className="text-xs text-gray-400 mb-0.5">{m.label}</div>

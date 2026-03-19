@@ -35,11 +35,11 @@ export interface ChatRequest {
 }
 
 export interface RecommendationMetrics {
-  return3Y:     number | null;
+  return1M:     number | null;
+  return3M:     number | null;
   volatility:   number | null;
   sharpe:       number | null;
-  expenseRatio: number | null;
-  dividendYield:number | null;
+  maxDrawdown:  number | null;
 }
 
 export interface Recommendation {
@@ -109,11 +109,11 @@ Output ONLY a raw JSON object matching this exact schema — no markdown, no pre
       "risks": "string — specific downside risks",
       "profile": ["Growth" | "Income" | "Preservation"],
       "metrics": {
-        "return3Y": number | null,
+        "return1M": number | null,
+        "return3M": number | null,
         "volatility": number | null,
         "sharpe": number | null,
-        "expenseRatio": number | null,
-        "dividendYield": number | null
+        "maxDrawdown": number | null
       }
     }
   ],
@@ -184,10 +184,11 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
           `\n\nRelevant ETFs in database (use ONLY these when making recommendations):\n` +
           etfContext.map(e =>
             `${e.ticker} (${e.name}): ` +
-            `3Y=${e.return3Y != null ? (e.return3Y * 100).toFixed(1) + '%' : 'N/A'}, ` +
+            `1M=${e.return1M != null ? (e.return1M * 100).toFixed(1) + '%' : 'N/A'}, ` +
+            `3M=${e.return3M != null ? (e.return3M * 100).toFixed(1) + '%' : 'N/A'}, ` +
             `Vol=${e.volatility != null ? (e.volatility * 100).toFixed(1) + '%' : 'N/A'}, ` +
             `Sharpe=${e.sharpe?.toFixed(2) ?? 'N/A'}, ` +
-            `ER=${e.expenseRatio != null ? (e.expenseRatio * 100).toFixed(2) + '%' : 'N/A'}`
+            `MaxDD=${e.maxDrawdown != null ? (e.maxDrawdown * 100).toFixed(1) + '%' : 'N/A'}`
           ).join('\n');
       }
     } catch (dbErr) {
