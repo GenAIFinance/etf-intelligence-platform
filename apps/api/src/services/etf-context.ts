@@ -42,24 +42,26 @@ function detectThemes(query: string): string[] {
 // ── Return type ───────────────────────────────────────────────────────────────
 
 export interface EtfContextRow {
-  ticker:       string;
-  name:         string;
-  themes:       string[];
-  return3Y:     number | null;
-  volatility:   number | null;
-  sharpe:       number | null;
-  expenseRatio: number | null;
+  ticker:      string;
+  name:        string;
+  themes:      string[];
+  return1M:    number | null;
+  return3M:    number | null;
+  volatility:  number | null;
+  sharpe:      number | null;
+  maxDrawdown: number | null;
 }
 
 // Raw SQL row shape returned by Postgres
 interface RawEtfRow {
-  ticker:            string;
-  name:              string;
-  themes:            string[] | null;
-  net_expense_ratio: number | null;
-  return_1_y:        number | null;
-  volatility:        number | null;
-  sharpe:            number | null;
+  ticker:      string;
+  name:        string;
+  themes:      string[] | null;
+  return_1m:   number | null;
+  return_3m:   number | null;
+  volatility:  number | null;
+  sharpe:      number | null;
+  max_drawdown: number | null;
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -74,13 +76,14 @@ export async function getEtfContext(query: string): Promise<EtfContextRow[]> {
         e.ticker,
         e.name,
         e.themes,
-        e."netExpenseRatio"   AS net_expense_ratio,
-        s."return3Y"          AS return_1_y,
+        s."return1M"     AS return_1m,
+        s."return3M"     AS return_3m,
         s.volatility,
-        s.sharpe
+        s.sharpe,
+        s."maxDrawdown"  AS max_drawdown
       FROM "Etf" e
       LEFT JOIN LATERAL (
-        SELECT "return3Y", volatility, sharpe
+        SELECT "return1M", "return3M", volatility, sharpe, "maxDrawdown"
         FROM   "EtfMetricSnapshot"
         WHERE  "etfId" = e.id
         ORDER  BY "asOfDate" DESC
@@ -102,13 +105,14 @@ export async function getEtfContext(query: string): Promise<EtfContextRow[]> {
       e.ticker,
       e.name,
       e.themes,
-      e."netExpenseRatio"   AS net_expense_ratio,
-      s."return3Y"          AS return_1_y,
+      s."return1M"     AS return_1m,
+      s."return3M"     AS return_3m,
       s.volatility,
-      s.sharpe
+      s.sharpe,
+      s."maxDrawdown"  AS max_drawdown
     FROM "Etf" e
     LEFT JOIN LATERAL (
-      SELECT "return3Y", volatility, sharpe
+      SELECT "return1M", "return3M", volatility, sharpe, "maxDrawdown"
       FROM   "EtfMetricSnapshot"
       WHERE  "etfId" = e.id
       ORDER  BY "asOfDate" DESC
@@ -130,12 +134,13 @@ export async function getEtfContext(query: string): Promise<EtfContextRow[]> {
 
 function formatRows(rows: RawEtfRow[]): EtfContextRow[] {
   return rows.map(r => ({
-    ticker:       r.ticker,
-    name:         r.name,
-    themes:       r.themes ?? [],
-    return3Y:     r.return_1_y        ?? null,
-    volatility:   r.volatility        ?? null,
-    sharpe:       r.sharpe            ?? null,
-    expenseRatio: r.net_expense_ratio ?? null,
+    ticker:      r.ticker,
+    name:        r.name,
+    themes:      r.themes      ?? [],
+    return1M:    r.return_1m   ?? null,
+    return3M:    r.return_3m   ?? null,
+    volatility:  r.volatility  ?? null,
+    sharpe:      r.sharpe      ?? null,
+    maxDrawdown: r.max_drawdown ?? null,
   }));
 }
