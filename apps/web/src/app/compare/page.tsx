@@ -201,7 +201,12 @@ function ComparePageInner() {
           const h = await holdingsResponses[i].json();
           const arr = Array.isArray(h) ? h : h?.holdings ?? [];
           newHoldings[validTickers[i]] = arr
-            .filter((r: HoldingRow) => r.ticker && r.weight)
+            .filter((r: any) => (r.holdingTicker || r.ticker) && r.weight)
+            .map((r: any) => ({
+              ticker: r.holdingTicker ?? r.ticker,
+              name:   r.holdingName  ?? r.name ?? '',
+              weight: r.weight,
+            }))
             .sort((a: HoldingRow, b: HoldingRow) => b.weight - a.weight)
             .slice(0, 10);
         } catch { newHoldings[validTickers[i]] = []; }
