@@ -252,10 +252,10 @@ function ComparePageInner() {
         const bMap = new Map(bH.map(h => [h.ticker, h.weight]));
         const shared: string[] = [];
         let overlapWeight = 0;
-        for (const [ticker, wa] of aMap) {
+        Array.from(aMap.entries()).forEach(([ticker, wa]) => {
           const wb = bMap.get(ticker);
           if (wb !== undefined) { shared.push(ticker); overlapWeight += Math.min(wa, wb); }
-        }
+        });
         pairs.push({ a, b, score: +overlapWeight.toFixed(1), shared });
       }
     }
