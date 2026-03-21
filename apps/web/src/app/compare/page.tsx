@@ -25,11 +25,14 @@ export const dynamic = 'force-dynamic';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-// ── Colour palette — one per ETF ─────────────────────────────────────────────
+// ── Colour palette — first 4 are maximally distinct ─────────────────────────
 const ETF_COLORS = [
-  '#2563eb', '#10b981', '#f59e0b', '#ef4444',
-  '#8b5cf6', '#06b6d4', '#f97316', '#84cc16',
-  '#ec4899', '#14b8a6', '#a855f7', '#fb923c',
+  '#2563eb', // blue
+  '#f97316', // orange
+  '#10b981', // green
+  '#ef4444', // red
+  '#8b5cf6', '#06b6d4', '#84cc16', '#ec4899',
+  '#14b8a6', '#a855f7', '#fb923c', '#f59e0b',
 ];
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -233,13 +236,13 @@ function ComparePageInner() {
     const validTickers = tickers.filter(t => t.trim());
     if (!validTickers.length) return [];
     const dateMap = new Map<string, Record<string, number>>();
-    for (const ticker of validTickers) {
+    validTickers.forEach(ticker => {
       const norm = normalisePrices(priceMap[ticker] ?? []);
-      for (const pt of norm) {
+      norm.forEach(pt => {
         if (!dateMap.has(pt.date)) dateMap.set(pt.date, {});
         dateMap.get(pt.date)![ticker] = pt.value;
-      }
-    }
+      });
+    });
     return Array.from(dateMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, vals]) => ({ date: date.slice(0, 10), ...vals }));
@@ -453,7 +456,7 @@ function ComparePageInner() {
                       contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
                     />
                     <Legend wrapperStyle={{ fontSize: 12 }}/>
-                    {comparison.etfs.map((etf, i) => (
+                    {comparison.etfs.slice(0, 4).map((etf, i) => (
                       <Line key={etf.ticker} type="monotone" dataKey={etf.ticker}
                         stroke={ETF_COLORS[i % ETF_COLORS.length]}
                         dot={false} strokeWidth={2} connectNulls/>
@@ -470,7 +473,26 @@ function ComparePageInner() {
               </p>
             </div>
 
-            {/* ── 2. Metrics Table ─────────────────────────────────────── */}
+            {/* ── ETF Name Cards ───────────────────────────────────────── */}
+            <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.min(comparison.etfs.length, 4)}, minmax(0, 1fr))` }}>
+              {comparison.etfs.slice(0, 4).map((etf, i) => (
+                <div key={etf.ticker} className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 flex items-start gap-3">
+                  <span className="w-3 h-3 rounded-full mt-1 shrink-0" style={{ backgroundColor: ETF_COLORS[i % ETF_COLORS.length] }}/>
+                  <div className="min-w-0">
+                    <p className="font-bold text-gray-900">{etf.ticker}</p>
+                    <p className="text-xs text-gray-500 leading-snug mt-0.5 line-clamp-2">{etf.name}</p>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {etf.assetClass && (
+                        <span className="text-xs bg-blue-50 text-blue-700 border border-blue-100 rounded px-1.5 py-0.5">{etf.assetClass}</span>
+                      )}
+                      {etf.strategyType && (
+                        <span className="text-xs bg-gray-100 text-gray-600 border border-gray-200 rounded px-1.5 py-0.5">{etf.strategyType}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
               <h2 className="text-lg font-bold text-gray-900 mb-5">Metrics</h2>
               <div className="overflow-x-auto">
