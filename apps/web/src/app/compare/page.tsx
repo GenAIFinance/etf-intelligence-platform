@@ -102,6 +102,7 @@ function ComparePageInner() {
   const [comparison, setComparison] = useState<ComparisonResponse|null>(null);
   const [metricsMap, setMetricsMap] = useState<Record<string, MetricsData>>({});
   const [holdingsMap, setHoldingsMap] = useState<Record<string, HoldingRow[]>>({});
+  const [allHoldingsMap, setAllHoldingsMap] = useState<Record<string, HoldingRow[]>>({});
   const [priceMap,   setPriceMap]   = useState<Record<string, { date: string; close: number }[]>>({});
   const [period,     setPeriod]     = useState<PeriodKey>('1Y');
   const [isLoading,  setIsLoading]  = useState(false);
@@ -146,9 +147,9 @@ function ComparePageInner() {
       for (let i = 0; i < validTickers.length; i++) {
         const raw = results[i];
         const arr = Array.isArray(raw) ? raw : raw?.prices ?? [];
-        newPrices[validTickers[i]] = arr.map((pt: { date?: string; adjusted_close?: number; close?: number }) => ({
+        newPrices[validTickers[i]] = arr.map((pt: { date?: string; adjustedClose?: number; close?: number }) => ({
           date: pt.date ?? '',
-          close: pt.adjusted_close ?? pt.close ?? 0,
+          close: pt.adjustedClose ?? pt.close ?? 0,
         })).filter((pt: { date: string; close: number }) => pt.date && pt.close > 0);
       }
       setPriceMap(newPrices);
@@ -199,22 +200,28 @@ function ComparePageInner() {
 
       // Holdings
       const newHoldings: Record<string, HoldingRow[]> = {};
+      const newAllHoldings: Record<string, HoldingRow[]> = {};
       for (let i = 0; i < validTickers.length; i++) {
         try {
           const h = await holdingsResponses[i].json();
           const arr = Array.isArray(h) ? h : h?.holdings ?? [];
-          newHoldings[validTickers[i]] = arr
+          const parsed: HoldingRow[] = arr
             .filter((r: any) => (r.holdingTicker || r.ticker) && r.weight)
             .map((r: any) => ({
               ticker: r.holdingTicker ?? r.ticker,
               name:   r.holdingName  ?? r.name ?? '',
               weight: r.weight,
             }))
-            .sort((a: HoldingRow, b: HoldingRow) => b.weight - a.weight)
-            .slice(0, 10);
-        } catch { newHoldings[validTickers[i]] = []; }
+            .sort((a: HoldingRow, b: HoldingRow) => b.weight - a.weight);
+          newAllHoldings[validTickers[i]] = parsed;          // all holdings for overlap
+          newHoldings[validTickers[i]]    = parsed.slice(0, 10); // top 10 for display
+        } catch {
+          newHoldings[validTickers[i]]    = [];
+          newAllHoldings[validTickers[i]] = [];
+        }
       }
       setHoldingsMap(newHoldings);
+      setAllHoldingsMap(newAllHoldings);
 
       // Prices
       await loadPrices(validTickers, period);
@@ -250,12 +257,12 @@ function ComparePageInner() {
 
   // ── Holdings overlap ────────────────────────────────────────────────────────
   const overlapMatrix = useMemo(() => {
-    const validTickers = tickers.filter(t => t.trim() && holdingsMap[t]);
+    const validTickers = tickers.filter(t => t.trim() && allHoldingsMap[t]);
     const pairs: { a: string; b: string; score: number; shared: string[] }[] = [];
     for (let i = 0; i < validTickers.length; i++) {
       for (let j = i + 1; j < validTickers.length; j++) {
         const a = validTickers[i]; const b = validTickers[j];
-        const aH = holdingsMap[a] ?? []; const bH = holdingsMap[b] ?? [];
+        const aH = allHoldingsMap[a] ?? []; const bH = allHoldingsMap[b] ?? [];
         const aMap = new Map(aH.map(h => [h.ticker, h.weight]));
         const bMap = new Map(bH.map(h => [h.ticker, h.weight]));
         const shared: string[] = [];
@@ -268,7 +275,7 @@ function ComparePageInner() {
       }
     }
     return pairs;
-  }, [holdingsMap, tickers]);
+  }, [allHoldingsMap, tickers]);
 
   // ── Best value helper ───────────────────────────────────────────────────────
   function bestTicker(field: keyof MetricsData, higherIsBetter: boolean): string | null {
@@ -640,7 +647,7 @@ function ComparePageInner() {
                 </table>
               </div>
               <p className="text-xs text-gray-400 mt-3">
-                <span className="text-amber-600 font-medium">Amber</span> = holding appears in multiple ETFs being compared
+                <span className="text-amber-600 font-medium">Amber</span> = holding appears in multiple ETFs · Overlap score calculated across all holdings · Top 10 shown by weight
               </p>
             </div>
 
