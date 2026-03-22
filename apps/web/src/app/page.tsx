@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, ExternalLink, AlertCircle, Bot, GitCompare, Eye, Play, Database, Shield } from 'lucide-react';
 
 // Inline mock data
@@ -18,15 +18,13 @@ const MOCK_ETFS = [
   { ticker: 'VWO', name: 'Vanguard FTSE Emerging Markets ETF', assetClass: 'Equity' },
 ];
 
-const MOCK_TOP_IMPACTED = {
-  topEtfs: [
-    { ticker: 'SOXX', name: 'iShares Semiconductor ETF', totalImpactScore: 8.7, newsCount: 12 },
-    { ticker: 'ARKK', name: 'ARK Innovation ETF', totalImpactScore: 7.2, newsCount: 9 },
-    { ticker: 'XLK', name: 'Technology Select Sector SPDR Fund', totalImpactScore: 6.5, newsCount: 8 },
-    { ticker: 'QQQ', name: 'Invesco QQQ Trust', totalImpactScore: 5.8, newsCount: 15 },
-    { ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust', totalImpactScore: 4.2, newsCount: 22 },
-  ],
-};
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+interface Gainer {
+  ticker:   string;
+  name:     string;
+  return1M: number;
+}
 
 const MOCK_TRENDING_TOPICS = {
   topics: [
@@ -91,6 +89,16 @@ const GETTING_STARTED_VIDEOS = [
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [videoTab, setVideoTab] = useState<'education' | 'started'>('education');
+  const [gainers, setGainers] = useState<Gainer[]>([]);
+  const [gainersLoading, setGainersLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/top-gainers`)
+      .then((res) => res.json())
+      .then((data) => setGainers(data.gainers ?? []))
+      .catch(() => setGainers([]))
+      .finally(() => setGainersLoading(false));
+  }, []);
 
   const filteredEtfs = searchQuery
     ? MOCK_ETFS.filter(
@@ -235,20 +243,26 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Impacted ETFs */}
+        {/* Top Gainers */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-800">
-              Top Impacted ETFs This Week
+              Top Gainers This Month
             </h2>
             <Link href="/research" className="text-primary-600 text-sm hover:underline">
               View all
             </Link>
           </div>
 
-          {MOCK_TOP_IMPACTED.topEtfs.length > 0 ? (
+          {gainersLoading ? (
             <div className="space-y-3">
-              {MOCK_TOP_IMPACTED.topEtfs.slice(0, 5).map((etf, index) => (
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : gainers.length > 0 ? (
+            <div className="space-y-3">
+              {gainers.map((etf, index) => (
                 <div
                   key={etf.ticker}
                   className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 border border-gray-100 transition-colors"
@@ -263,10 +277,10 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-medium text-gray-900">
-                      Impact: {etf.totalImpactScore.toFixed(1)}
+                    <div className={`text-sm font-semibold ${etf.return1M >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {etf.return1M >= 0 ? '+' : ''}{(etf.return1M * 100).toFixed(2)}%
                     </div>
-                    <div className="text-xs text-gray-500">{etf.newsCount} news items</div>
+                    <div className="text-xs text-gray-500">1M return</div>
                   </div>
                 </div>
               ))}
@@ -274,7 +288,7 @@ export default function Dashboard() {
           ) : (
             <div className="text-center py-8 text-gray-500">
               <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-              <p>No impact data available</p>
+              <p>No data available</p>
             </div>
           )}
         </div>
