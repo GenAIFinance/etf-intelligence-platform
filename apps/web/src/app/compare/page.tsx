@@ -135,23 +135,30 @@ function ComparePageInner() {
 
   async function loadPrices(validTickers: string[], p: PeriodKey) {
     setPeriodLoading(true);
+    // Fallback order — if selected period returns no data, try shorter ones
+    const FALLBACK: PeriodKey[] = ['5Y','3Y','1Y','3M','1M'];
+    const periodFallbacks = FALLBACK.slice(FALLBACK.indexOf(p));
     try {
-      const results = await Promise.all(
-        validTickers.map(t =>
-          fetch(`${API_URL}/api/etfs/${t}/prices?range=${PERIOD_RANGE[p]}&interval=1d`)
-            .then(r => r.ok ? r.json() : null)
-            .catch(() => null)
-        )
-      );
       const newPrices: Record<string, { date: string; close: number }[]> = {};
-      for (let i = 0; i < validTickers.length; i++) {
-        const raw = results[i];
-        const arr = Array.isArray(raw) ? raw : raw?.prices ?? [];
-        newPrices[validTickers[i]] = arr.map((pt: { date?: string; adjustedClose?: number; close?: number }) => ({
-          date: pt.date ?? '',
-          close: pt.adjustedClose ?? pt.close ?? 0,
-        })).filter((pt: { date: string; close: number }) => pt.date && pt.close > 0);
-      }
+      await Promise.all(validTickers.map(async t => {
+        for (const tryPeriod of periodFallbacks) {
+          try {
+            const raw = await fetch(
+              `${API_URL}/api/etfs/${t}/prices?range=${PERIOD_RANGE[tryPeriod]}&interval=1d`
+            ).then(r => r.ok ? r.json() : null).catch(() => null);
+            const arr = Array.isArray(raw) ? raw : raw?.prices ?? [];
+            const parsed = arr.map((pt: { date?: string; adjustedClose?: number; close?: number }) => ({
+              date: pt.date ?? '',
+              close: pt.adjustedClose ?? pt.close ?? 0,
+            })).filter((pt: { date: string; close: number }) => pt.date && pt.close > 0);
+            if (parsed.length > 0) {
+              newPrices[t] = parsed;
+              break; // got data — stop trying shorter periods
+            }
+          } catch { /* try next period */ }
+        }
+        if (!newPrices[t]) newPrices[t] = []; // no data at any period
+      }));
       setPriceMap(newPrices);
     } finally { setPeriodLoading(false); }
   }
@@ -478,6 +485,31 @@ function ComparePageInner() {
               <p className="text-xs text-gray-400 mt-3 text-center">
                 % return from start of period · all series indexed to 0
               </p>
+              {/* Warn ETFs with less data than selected period */}
+              {(() => {
+                const limited = comparison.etfs.slice(0, 4).filter(etf => {
+                  const bars = priceMap[etf.ticker]?.length ?? 0;
+                  const thresholds: Record<PeriodKey, number> = { '1M': 15, '3M': 55, '1Y': 200, '3Y': 600, '5Y': 1000 };
+                  return bars > 0 && bars < thresholds[period];
+                });
+                const missing = comparison.etfs.slice(0, 4).filter(
+                  etf => !priceMap[etf.ticker] || priceMap[etf.ticker].length === 0
+                );
+                return (
+                  <>
+                    {limited.length > 0 && (
+                      <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2 text-center">
+                        Limited history for: {limited.map(e => e.ticker).join(', ')} — showing all available data
+                      </p>
+                    )}
+                    {missing.length > 0 && (
+                      <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mt-2 text-center">
+                        No price history for: {missing.map(e => e.ticker).join(', ')}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             {/* ── ETF Name Cards ───────────────────────────────────────── */}
