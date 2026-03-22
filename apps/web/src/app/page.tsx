@@ -62,6 +62,7 @@ const ETF_EDUCATION_VIDEOS = [
     title: '3 Portfolio Strategies for ETF Investors',
     duration: '4:00',
     description: 'Core-satellite, factor-based, and income strategies — and why a clear strategy improves long-term outcomes',
+    youtubeId: 'e9-BUFNSR9s',
   },
 ];
 
