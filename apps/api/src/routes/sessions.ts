@@ -21,7 +21,9 @@ export async function sessionRoutes(fastify: FastifyInstance) {
     const { session_id } = req.body as { session_id: string };
     await prisma.$executeRaw`
       UPDATE user_sessions
-      SET last_active_at = NOW()
+      SET
+        last_active_at = NOW(),
+        duration_sec   = EXTRACT(EPOCH FROM (NOW() - logged_in_at))::integer
       WHERE session_id = ${session_id}::uuid
     `;
     return reply.status(204).send();
