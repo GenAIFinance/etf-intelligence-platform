@@ -41,22 +41,44 @@ const MOCK_TRENDING_TOPICS = {
   ],
 };
 
-// Intro video data
-const INTRO_VIDEOS = [
+// ETF Education videos
+const ETF_EDUCATION_VIDEOS = [
   {
     id: 1,
+    title: 'What Is an ETF?',
+    duration: '2:30',
+    description: 'Understand the structure, mechanics, and key characteristics of exchange-traded funds',
+  },
+  {
+    id: 2,
+    title: 'ETFs vs. Single Stocks',
+    duration: '3:15',
+    description: 'Why ETFs offer better diversification, lower risk, and cost advantages over picking individual stocks',
+  },
+  {
+    id: 3,
+    title: '3 Portfolio Strategies for ETF Investors',
+    duration: '4:00',
+    description: 'Core-satellite, factor-based, and income strategies — and why a clear strategy improves long-term outcomes',
+  },
+];
+
+// Getting Started (app tutorial) videos
+const GETTING_STARTED_VIDEOS = [
+  {
+    id: 4,
     title: 'Getting Started with ETF Research',
     duration: '2:30',
     description: 'Learn how to use AI-powered screening tools',
   },
   {
-    id: 2,
+    id: 5,
     title: 'Comparing ETFs Effectively',
     duration: '3:15',
     description: 'Side-by-side analysis and performance metrics',
   },
   {
-    id: 3,
+    id: 6,
     title: 'Setting Up Price Alerts',
     duration: '1:45',
     description: 'Monitor your favorite ETFs with custom alerts',
@@ -65,6 +87,7 @@ const INTRO_VIDEOS = [
 
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [videoTab, setVideoTab] = useState<'education' | 'started'>('education');
 
   const filteredEtfs = searchQuery
     ? MOCK_ETFS.filter(
@@ -84,14 +107,40 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Intro Videos Section */}
+      {/* Video Section — Tabbed */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
           <Play className="w-5 h-5 text-primary-600" />
-          Getting Started Videos
+          Videos
         </h2>
+        {/* Tab toggle */}
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-4 w-fit">
+          <button
+            type="button"
+            onClick={() => setVideoTab('education')}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              videoTab === 'education'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            ETF Education
+          </button>
+          <button
+            type="button"
+            onClick={() => setVideoTab('started')}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              videoTab === 'started'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Getting Started
+          </button>
+        </div>
+        {/* Video grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {INTRO_VIDEOS.map((video) => (
+          {(videoTab === 'education' ? ETF_EDUCATION_VIDEOS : GETTING_STARTED_VIDEOS).map((video) => (
             <div
               key={video.id}
               className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
@@ -128,7 +177,7 @@ export default function Dashboard() {
               <div className="text-sm text-gray-600 mt-1">Countries Covered</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-primary-600">Real-time</div>
+              <div className="text-3xl font-bold text-primary-600">Daily</div>
               <div className="text-sm text-gray-600 mt-1">Price Updates</div>
             </div>
             <div className="text-center">
@@ -310,7 +359,6 @@ export default function Dashboard() {
           <strong>Disclaimer:</strong> This platform is for informational purposes only and does not constitute financial advice.
           All data is sourced from third-party providers and may not be real-time. Past performance does not guarantee future results.
           Always consult with a qualified financial advisor before making investment decisions.
-          Data provided by EODHD (personal-use license).
         </p>
       </div>
     </div>
