@@ -48,12 +48,14 @@ const ETF_EDUCATION_VIDEOS = [
     title: 'What Is an ETF?',
     duration: '2:30',
     description: 'Understand the structure, mechanics, and key characteristics of exchange-traded funds',
+    youtubeId: 't9PsTk2Weao',
   },
   {
     id: 2,
     title: 'ETFs vs. Single Stocks',
     duration: '3:15',
     description: 'Why ETFs offer better diversification, lower risk, and cost advantages over picking individual stocks',
+    youtubeId: 'wMWxMzFt7JU',
   },
   {
     id: 3,
@@ -143,15 +145,27 @@ export default function Dashboard() {
           {(videoTab === 'education' ? ETF_EDUCATION_VIDEOS : GETTING_STARTED_VIDEOS).map((video) => (
             <div
               key={video.id}
-              className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
+              className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
             >
-              <div className="relative aspect-video bg-gray-100 rounded-lg mb-3 flex items-center justify-center">
-                <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
-                  <Play className="w-6 h-6 text-primary-600 ml-1" />
-                </div>
-                <span className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded">
-                  {video.duration}
-                </span>
+              <div className="relative aspect-video bg-gray-100 rounded-lg mb-3 overflow-hidden">
+                {'youtubeId' in video && video.youtubeId ? (
+                  <iframe
+                    src={`https://www.youtube.com/embed/${video.youtubeId}`}
+                    title={video.title}
+                    className="w-full h-full"
+                    allowFullScreen
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
+                      <Play className="w-6 h-6 text-primary-600 ml-1" />
+                    </div>
+                    <span className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded">
+                      {video.duration}
+                    </span>
+                  </div>
+                )}
               </div>
               <h3 className="font-medium text-gray-900 text-sm">{video.title}</h3>
               <p className="text-xs text-gray-500 mt-1">{video.description}</p>
