@@ -57,7 +57,6 @@ interface MetricsData {
   returnYTD: number|null; volatility: number|null; sharpe: number|null;
   maxDrawdown: number|null; beta: number|null;
   expenseRatio: number|null; aum: number|null;
-  dividendYield: number|null;
 }
 
 interface HoldingRow { ticker: string; name: string; weight: number; }
@@ -176,13 +175,14 @@ function ComparePageInner() {
       ]);
 
       if (!compRes.ok) throw new Error((await compRes.json()).message || 'Comparison failed');
-      setComparison(await compRes.json());
+      const compData: ComparisonResponse = await compRes.json();
+      setComparison(compData);
 
-      // Metrics
       const metricsResponses = rest.slice(0, validTickers.length);
       const holdingsResponses = rest.slice(validTickers.length);
       const newMetrics: Record<string, MetricsData> = {};
       for (let i = 0; i < validTickers.length; i++) {
+        const etfBase = compData.etfs.find(e => e.ticker === validTickers[i]);
         try {
           const m = await metricsResponses[i].json();
           newMetrics[validTickers[i]] = {
@@ -197,11 +197,10 @@ function ComparePageInner() {
             sharpe:       m.risk?.sharpe        ?? m.riskMetrics?.sharpe        ?? null,
             maxDrawdown:  m.risk?.maxDrawdown   ?? m.riskMetrics?.maxDrawdown   ?? null,
             beta:         m.risk?.beta          ?? m.riskMetrics?.beta          ?? null,
-            expenseRatio: m.expenseRatio ?? null,
-            aum:          m.aum          ?? null,
-            dividendYield:m.dividendYield ?? null,
+            expenseRatio: etfBase?.netExpenseRatio ?? null,
+            aum:          etfBase?.aum             ?? null,
           };
-        } catch { newMetrics[validTickers[i]] = { return1M:null,return3M:null,return6M:null,return1Y:null,return3Y:null,return5Y:null,returnYTD:null,volatility:null,sharpe:null,maxDrawdown:null,beta:null,expenseRatio:null,aum:null,dividendYield:null }; }
+        } catch { newMetrics[validTickers[i]] = { return1M:null,return3M:null,return6M:null,return1Y:null,return3Y:null,return5Y:null,returnYTD:null,volatility:null,sharpe:null,maxDrawdown:null,beta:null,expenseRatio: etfBase?.netExpenseRatio ?? null, aum: etfBase?.aum ?? null }; }
       }
       setMetricsMap(newMetrics);
 
@@ -330,12 +329,6 @@ function ComparePageInner() {
       rows: [
         { label: 'Expense Ratio', field: 'expenseRatio', fmt: v => fmtPct(v), higherIsBetter: false, desc: 'Annual fee — lower saves you money' },
         { label: 'AUM',           field: 'aum',          fmt: v => fmtAum(v), higherIsBetter: true,  desc: 'Larger AUM = more liquid' },
-      ],
-    },
-    {
-      label: 'Income',
-      rows: [
-        { label: 'Dividend Yield', field: 'dividendYield', fmt: v => fmtPct(v), higherIsBetter: true },
       ],
     },
   ];
