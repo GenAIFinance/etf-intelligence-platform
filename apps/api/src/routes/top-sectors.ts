@@ -12,9 +12,9 @@ import { PrismaClient }    from '@prisma/client';
 const prisma = new PrismaClient();
 
 interface SectorRow {
-  strategyType: string;
-  etf_count:    bigint;
-  avg_return1M: number | null;
+  strategyType:  string;
+  etf_count:     bigint;
+  avg_return1m:  number | null;
 }
 
 export async function topSectorsRoutes(fastify: FastifyInstance) {
@@ -39,7 +39,8 @@ export async function topSectorsRoutes(fastify: FastifyInstance) {
           AND m."return1M" IS NOT NULL
         GROUP BY e."strategyType"
         HAVING COUNT(DISTINCT e.id) >= 5
-        ORDER BY avg_return1M DESC
+          AND AVG(m."return1M") IS NOT NULL
+        ORDER BY avg_return1m DESC
         LIMIT 8
       `;
 
@@ -47,7 +48,7 @@ export async function topSectorsRoutes(fastify: FastifyInstance) {
       const sectors = rows.map(r => ({
         strategyType: r.strategyType,
         etfCount:     Number(r.etf_count),
-        avgReturn1M:  r.avg_return1M !== null ? Number(r.avg_return1M) : null,
+        avgReturn1M:  r.avg_return1m !== null ? Number(r.avg_return1m) : null,
       }));
 
       return reply.send({ sectors });
