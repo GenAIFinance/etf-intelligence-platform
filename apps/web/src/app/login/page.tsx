@@ -12,6 +12,8 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { User, TrendingUp } from 'lucide-react';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 // ── Inner component — uses useSearchParams, must be inside <Suspense> ────────
 function LoginForm() {
   const router       = useRouter();
@@ -42,6 +44,20 @@ function LoginForm() {
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        // Register session with backend so tracking starts immediately
+        const getCookie = (n: string) => {
+          const match = document.cookie.match(new RegExp('(^| )' + n + '=([^;]+)'));
+          return match ? decodeURIComponent(match[2]) : null;
+        };
+        const sessionId = data.sessionId ?? getCookie('etf_session');
+        if (sessionId) {
+          fetch(`${API_URL}/api/sessions/login`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ session_id: sessionId, username: name }),
+          }).catch(() => { /* silent */ });
+        }
         router.replace(redirect);
       } else {
         const data = await res.json().catch(() => ({}));

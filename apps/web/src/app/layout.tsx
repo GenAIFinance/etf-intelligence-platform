@@ -7,6 +7,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BarChart3, Info, Bot, GitCompare, Eye } from 'lucide-react';
+import { useHeartbeat } from '../hooks/useHeartbeat';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -90,6 +91,8 @@ export default function RootLayout({
         },
       })
   );
+
+  useHeartbeat();
 
   return (
     <html lang="en">

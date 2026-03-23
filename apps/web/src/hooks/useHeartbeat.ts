@@ -1,61 +1,45 @@
 // apps/web/src/hooks/useHeartbeat.ts
 //
-// Fires a heartbeat POST every 5 minutes while the tab is active.
-// Pauses automatically when tab is hidden (document.visibilityState).
-// Add to root layout so it runs on every page without per-page wiring.
-
-'use client';
+// Runs in the root layout for every authenticated page.
+// On mount:   registers the session with the backend (upsert — safe to call multiple times)
+// Every 60s:  pings /api/sessions/ping so duration_sec stays current
+// On unmount: clears the interval
 
 import { useEffect } from 'react';
 
-const INTERVAL_MS    = 5 * 60 * 1000; // 5 minutes
-const HEARTBEAT_PATH = '/api/auth/heartbeat';
+const API_URL       = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const PING_INTERVAL = 60_000; // 60 seconds
 
-export function useHeartbeat() {
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+export function useHeartbeat(): void {
   useEffect(() => {
-    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const username  = getCookie('etf_user');
+    const sessionId = getCookie('etf_session');
 
-    function ping() {
-      // Only ping when tab is visible — avoids wasting DB writes on idle tabs
-      if (document.visibilityState !== 'visible') return;
-      fetch(HEARTBEAT_PATH, { method: 'POST' }).catch(() => {
-        // Silently ignore — heartbeat failure should never affect UX
-      });
-    }
+    // Not logged in — nothing to track
+    if (!username || !sessionId) return;
 
-    function startInterval() {
-      if (intervalId) return;
-      intervalId = setInterval(ping, INTERVAL_MS);
-    }
+    // Register session on mount (ON CONFLICT DO NOTHING — safe to repeat)
+    fetch(`${API_URL}/api/sessions/login`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ session_id: sessionId, username }),
+    }).catch(() => { /* silent — never block the UI */ });
 
-    function stopInterval() {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    }
+    // Ping every 60s to keep duration_sec and last_active_at current
+    const interval = setInterval(() => {
+      fetch(`${API_URL}/api/sessions/ping`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ session_id: sessionId }),
+      }).catch(() => { /* silent */ });
+    }, PING_INTERVAL);
 
-    // Send one ping immediately on mount (captures page loads / navigation)
-    ping();
-
-    // Start the recurring interval
-    startInterval();
-
-    // Pause when tab is hidden, resume when visible again
-    function handleVisibilityChange() {
-      if (document.visibilityState === 'visible') {
-        ping();           // immediate ping on tab focus
-        startInterval();
-      } else {
-        stopInterval();
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      stopInterval();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
+    return () => clearInterval(interval);
+  }, []); // runs once per page load
 }
