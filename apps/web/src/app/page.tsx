@@ -2,21 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { Search, ExternalLink, AlertCircle, Bot, GitCompare, Eye, Play, Database, Shield } from 'lucide-react';
-
-// Inline mock data
-const MOCK_ETFS = [
-  { ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust', assetClass: 'Equity' },
-  { ticker: 'QQQ', name: 'Invesco QQQ Trust', assetClass: 'Equity' },
-  { ticker: 'VTI', name: 'Vanguard Total Stock Market ETF', assetClass: 'Equity' },
-  { ticker: 'ARKK', name: 'ARK Innovation ETF', assetClass: 'Equity' },
-  { ticker: 'XLK', name: 'Technology Select Sector SPDR Fund', assetClass: 'Equity' },
-  { ticker: 'XLF', name: 'Financial Select Sector SPDR Fund', assetClass: 'Equity' },
-  { ticker: 'SOXX', name: 'iShares Semiconductor ETF', assetClass: 'Equity' },
-  { ticker: 'TLT', name: 'iShares 20+ Year Treasury Bond ETF', assetClass: 'Fixed Income' },
-  { ticker: 'GLD', name: 'SPDR Gold Shares', assetClass: 'Commodity' },
-  { ticker: 'VWO', name: 'Vanguard FTSE Emerging Markets ETF', assetClass: 'Equity' },
-];
+import { ExternalLink, AlertCircle, Bot, GitCompare, Eye, Play, Database, Shield } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -87,7 +73,6 @@ const GETTING_STARTED_VIDEOS = [
 ];
 
 export default function Dashboard() {
-  const [searchQuery, setSearchQuery] = useState('');
   const [videoTab, setVideoTab] = useState<'education' | 'started'>('education');
   const [gainers, setGainers] = useState<Gainer[]>([]);
   const [gainersLoading, setGainersLoading] = useState(true);
@@ -99,14 +84,6 @@ export default function Dashboard() {
       .catch(() => setGainers([]))
       .finally(() => setGainersLoading(false));
   }, []);
-
-  const filteredEtfs = searchQuery
-    ? MOCK_ETFS.filter(
-        (etf) =>
-          etf.ticker.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          etf.name.toLowerCase().includes(searchQuery.toLowerCase())
-      ).slice(0, 5)
-    : [];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -211,37 +188,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-8">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Search ETFs by ticker or name..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-12 pr-4 py-3 text-lg border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-        />
-
-        {/* Search Results Dropdown */}
-        {searchQuery && filteredEtfs.length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto">
-            {filteredEtfs.map((etf) => (
-              <div
-                key={etf.ticker}
-                className="flex items-center justify-between px-4 py-3 border-b last:border-0 cursor-pointer hover:bg-gray-50"
-                onClick={() => setSearchQuery('')}
-              >
-                <div>
-                  <span className="font-semibold text-gray-900">{etf.ticker}</span>
-                  <span className="text-gray-500 ml-2">{etf.name}</span>
-                </div>
-                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">{etf.assetClass}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Gainers */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -278,7 +224,7 @@ export default function Dashboard() {
                   </div>
                   <div className="text-right">
                     <div className={`text-sm font-semibold ${etf.return1M >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {etf.return1M >= 0 ? '+' : ''}{(etf.return1M * 100).toFixed(2)}%
+                      {etf.return1M >= 0 ? '+' : ''}{etf.return1M.toFixed(2)}%
                     </div>
                     <div className="text-xs text-gray-500">1M return</div>
                   </div>
