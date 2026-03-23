@@ -11,6 +11,7 @@ import { etfRoutes }           from './routes/etfs';
 import { screenerRoutes }      from './routes/screener-route';
 import { sessionRoutes }       from './routes/sessions';
 import { topGainersRoutes }    from './routes/top-gainers';
+import { topSectorsRoutes }    from './routes/top-sectors';
 
 const prisma = new PrismaClient();
 
@@ -158,6 +159,7 @@ async function startServer() {
   await app.register(screenerRoutes,      { prefix: '/api' });
   await app.register(sessionRoutes);
   await app.register(topGainersRoutes,    { prefix: '/api' });
+  await app.register(topSectorsRoutes,    { prefix: '/api' });
 
   try {
     await app.listen({ port: 3001, host: '0.0.0.0' });

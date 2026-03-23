@@ -12,18 +12,11 @@ interface Gainer {
   return1M: number;
 }
 
-const MOCK_TRENDING_TOPICS = {
-  topics: [
-    { topic: 'AI Chip Export Controls', count: 24 },
-    { topic: 'Interest Rate Decision', count: 18 },
-    { topic: 'Earnings Report', count: 15 },
-    { topic: 'FDA Regulation', count: 12 },
-    { topic: 'Merger & Acquisition', count: 10 },
-    { topic: 'Supply Chain Issues', count: 8 },
-    { topic: 'Trade Policy', count: 7 },
-    { topic: 'Product Launch', count: 6 },
-  ],
-};
+interface Sector {
+  strategyType: string;
+  etfCount:     number;
+  avgReturn1M:  number | null;
+}
 
 // ETF Education videos
 const ETF_EDUCATION_VIDEOS = [
@@ -76,6 +69,8 @@ export default function Dashboard() {
   const [videoTab, setVideoTab] = useState<'education' | 'started'>('education');
   const [gainers, setGainers] = useState<Gainer[]>([]);
   const [gainersLoading, setGainersLoading] = useState(true);
+  const [sectors, setSectors] = useState<Sector[]>([]);
+  const [sectorsLoading, setSectorsLoading] = useState(true);
 
   useEffect(() => {
     fetch(`${API_URL}/api/top-gainers`)
@@ -83,6 +78,12 @@ export default function Dashboard() {
       .then((data) => setGainers(data.gainers ?? []))
       .catch(() => setGainers([]))
       .finally(() => setGainersLoading(false));
+
+    fetch(`${API_URL}/api/top-sectors`)
+      .then((res) => res.json())
+      .then((data) => setSectors(data.sectors ?? []))
+      .catch(() => setSectors([]))
+      .finally(() => setSectorsLoading(false));
   }, []);
 
   return (
@@ -239,34 +240,51 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Trending Topics */}
+        {/* Top Sectors */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">Trending Topics</h2>
+            <h2 className="text-lg font-semibold text-gray-800">Top Sectors This Month</h2>
             <Link href="/research" className="text-primary-600 text-sm hover:underline">
               View all
             </Link>
           </div>
 
-          {MOCK_TRENDING_TOPICS.topics.length > 0 ? (
+          {sectorsLoading ? (
             <div className="space-y-2">
-              {MOCK_TRENDING_TOPICS.topics.slice(0, 8).map((topic, index) => (
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : sectors.length > 0 ? (
+            <div className="space-y-2">
+              {sectors.map((sector, index) => (
                 <div
-                  key={topic.topic}
+                  key={sector.strategyType}
                   className="flex items-center justify-between p-3 rounded-lg bg-gray-50"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-lg font-bold text-gray-400">#{index + 1}</span>
-                    <span className="font-medium text-gray-800">{topic.topic}</span>
+                    <span className="text-sm font-bold text-gray-400">#{index + 1}</span>
+                    <span className="font-medium text-gray-800 text-sm">{sector.strategyType}</span>
                   </div>
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{topic.count} mentions</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-semibold ${
+                      sector.avgReturn1M === null ? 'text-gray-400'
+                        : sector.avgReturn1M >= 0 ? 'text-emerald-600'
+                        : 'text-red-600'
+                    }`}>
+                      {sector.avgReturn1M === null
+                        ? 'N/A'
+                        : `${sector.avgReturn1M >= 0 ? '+' : ''}${sector.avgReturn1M.toFixed(2)}%`}
+                    </span>
+                    <span className="text-xs text-gray-400 hidden sm:inline">{sector.etfCount} ETFs</span>
+                  </div>
                 </div>
               ))}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
               <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-              <p>No trending topics</p>
+              <p>No sector data available</p>
             </div>
           )}
         </div>
