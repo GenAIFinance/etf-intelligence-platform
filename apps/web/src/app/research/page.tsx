@@ -501,6 +501,7 @@ export default function ResearchPage(): React.ReactElement {
   const PAGE_SIZE = 20;
 
   // Advisor state
+  const [askSection, setAskSection] = useState<'macro-rates'|'by-category'|'by-strategy'>('macro-rates');
   const [messages,   setMessages]   = useState<ChatMessage[]>([]);
   const [askInput,   setAskInput]   = useState('');
   const [askLoading, setAskLoading] = useState(false);
@@ -572,7 +573,7 @@ export default function ResearchPage(): React.ReactElement {
       },[]);
       const res = await fetch(`${API_URL}/api/ai-chat/query`,{
         method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({query:trimmedQuery,history}),
+        body:JSON.stringify({query:trimmedQuery, section:askSection, history}),
       });
       if(!res.ok){const b=await res.json().catch(()=>({})) as {error?:string}; throw new Error(b.error??`Server error ${res.status}`);}
       const data=await res.json() as AdvisorResponse;
@@ -800,6 +801,23 @@ export default function ResearchPage(): React.ReactElement {
           <>
             {/* Ask input — pinned at top so refinement is always reachable */}
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+              {/* Active section pill */}
+              <div className="flex gap-1.5 mb-3">
+                {([
+                  { key: 'macro-rates'  as const, label: 'Macro & Rates'  },
+                  { key: 'by-category'  as const, label: 'By Category'    },
+                  { key: 'by-strategy'  as const, label: 'By Strategy'    },
+                ]).map(s=>(
+                  <button key={s.key} type="button" onClick={()=>setAskSection(s.key)}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors ${
+                      askSection===s.key
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    }`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
               <div className="relative">
                 <textarea ref={askRef} value={askInput}
                   onChange={(e:React.ChangeEvent<HTMLTextAreaElement>)=>setAskInput(e.target.value)}
@@ -829,7 +847,7 @@ export default function ResearchPage(): React.ReactElement {
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Macro &amp; Rates</p>
                   <div className="space-y-2">
                     {ASK_EXAMPLES_MACRO.map(q=>(
-                      <button key={q} type="button" onClick={()=>void sendAsk(q)}
+                      <button key={q} type="button" onClick={()=>{ setAskSection('macro-rates'); void sendAsk(q); }}
                         className="w-full text-left text-sm text-gray-600 px-4 py-2.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors">
                         {q}
                       </button>
@@ -841,7 +859,7 @@ export default function ResearchPage(): React.ReactElement {
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">By Category</p>
                   <div className="space-y-2">
                     {ASK_EXAMPLES_CATEGORY.map(q=>(
-                      <button key={q} type="button" onClick={()=>void sendAsk(q)}
+                      <button key={q} type="button" onClick={()=>{ setAskSection('by-category'); void sendAsk(q); }}
                         className="w-full text-left text-sm text-gray-600 px-4 py-2.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors">
                         {q}
                       </button>
@@ -853,7 +871,7 @@ export default function ResearchPage(): React.ReactElement {
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">By Strategy</p>
                   <div className="space-y-2">
                     {ASK_EXAMPLES_STRATEGY.map(q=>(
-                      <button key={q} type="button" onClick={()=>void sendAsk(q)}
+                      <button key={q} type="button" onClick={()=>{ setAskSection('by-strategy'); void sendAsk(q); }}
                         className="w-full text-left text-sm text-gray-600 px-4 py-2.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors">
                         {q}
                       </button>
