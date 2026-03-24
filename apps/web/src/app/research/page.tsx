@@ -37,7 +37,7 @@ interface Constraints {
 }
 interface ScreenerRequest {
   objective: Objective; riskProfile: RiskProfile; constraints: Constraints;
-  page?: number; pageSize?: number; sortBy?: 'totalScore'|'expenseRatio'|'sharpeRatio'|'volatility';
+  page?: number; pageSize?: number; sortBy?: 'totalScore'|'expenseRatio'|'sharpeRatio'|'volatility'|'annualized3Y'|'annualized5Y'|'aum';
 }
 interface MetricContributor { metricName: string; weight: number; rawValue: number|null; contribution: number; }
 interface ScreenerResult {
