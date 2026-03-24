@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, RefreshCw, ChevronDown, ChevronUp, ExternalLink,
-  Send, Sparkles, AlertCircle, CheckCircle2, PenLine, Loader2,
+  Send, AlertCircle, Loader2,
   Zap, MessageSquare, TrendingUp, TrendingDown, Minus, ShieldAlert,
   BarChart2, XCircle, Lightbulb, Info, AlertTriangle,
 } from 'lucide-react';
@@ -26,8 +26,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 type Objective    = 'growth' | 'income' | 'preservation';
 type RiskProfile  = 'low' | 'medium' | 'high';
 type EsgPref      = 'no_preference' | 'prefer' | 'exclude';
-type Confidence   = 'high' | 'medium' | 'low';
-type FeedbackHint = 'too_risky' | 'too_conservative' | 'too_expensive' | 'not_aligned';
 type ScreenMode   = 'idle' | 'parsing' | 'confirming' | 'screening' | 'results';
 type TabMode      = 'screen' | 'ask';
 type Sentiment    = 'bullish' | 'bearish' | 'neutral' | 'mixed';
@@ -41,7 +39,6 @@ interface ScreenerRequest {
   objective: Objective; riskProfile: RiskProfile; constraints: Constraints;
   page?: number; pageSize?: number; sortBy?: 'totalScore'|'expenseRatio'|'sharpeRatio'|'volatility';
 }
-interface ParsedParams { request: ScreenerRequest; interpretation: string; confidence: Confidence; }
 interface MetricContributor { metricName: string; weight: number; rawValue: number|null; contribution: number; }
 interface ScreenerResult {
   ticker: string; name: string; totalScore: number; confidenceBand: 'High'|'Medium'|'Low';
@@ -132,17 +129,52 @@ function constraintChips(c: Constraints): string[] {
   return out;
 }
 
-const SCREEN_EXAMPLES = [
-  'Low-cost broad market ETFs with good 3-year returns and low volatility',
-  'Conservative income ETFs focused on dividends, large funds only',
-  'Aggressive growth ETFs, expense ratio under 0.3%',
-  'Capital preservation with high Sharpe ratio and minimal drawdown',
+// ── Find ETFs — hardcoded direct-DB buttons (no AI call) ──────────────────
+
+const EMPTY_C: Constraints = {
+  excludeSectors: [], esgPreference: 'no_preference',
+  maxExpenseRatio: null, minAUM: null, minSharpe: null,
+  minReturn3Y: null, minReturn5Y: null, maxVolatility: null,
+};
+
+interface FindButton {
+  label:   string;
+  hint:    string;
+  section: string;
+  req:     Omit<ScreenerRequest, 'page'|'pageSize'>;
+}
+
+const FIND_BUTTONS: FindButton[] = [
+  { section:'By Metrics', label:'Lowest expense ratio',       hint:'lower = cheaper to hold long-term',
+    req:{ objective:'preservation', riskProfile:'low',    constraints:EMPTY_C, sortBy:'expenseRatio'  } },
+  { section:'By Metrics', label:'Highest Sharpe ratio',       hint:'higher = better risk-adjusted return',
+    req:{ objective:'growth',       riskProfile:'medium', constraints:EMPTY_C, sortBy:'sharpeRatio'   } },
+  { section:'By Metrics', label:'Lowest volatility',          hint:'lower = more stable during downturns',
+    req:{ objective:'preservation', riskProfile:'low',    constraints:EMPTY_C, sortBy:'volatility'    } },
+  { section:'By Return',  label:'Best 3-year annualized return', hint:'compounded annual growth over 3 years',
+    req:{ objective:'growth',       riskProfile:'high',   constraints:EMPTY_C, sortBy:'annualized3Y'  } },
+  { section:'By Return',  label:'Best 5-year annualized return', hint:'compounded annual growth over 5 years',
+    req:{ objective:'growth',       riskProfile:'high',   constraints:EMPTY_C, sortBy:'annualized5Y'  } },
+  { section:'By Size',    label:'Largest ETFs by AUM',         hint:'bigger = more liquid and established',
+    req:{ objective:'growth',       riskProfile:'medium', constraints:EMPTY_C, sortBy:'aum'           } },
 ];
-const ASK_EXAMPLES = [
+const ASK_EXAMPLES_MACRO = [
   'The Fed just raised rates — which ETFs benefit and which should I avoid?',
-  'AI stocks are booming — how can I get exposure without chasing a bubble?',
-  'With geopolitical tensions rising, what defensive ETFs make sense?',
   'How should I think about inflation protection in my ETF portfolio?',
+  'With geopolitical tensions rising, what defensive ETFs make sense?',
+  'How do currencies affect international ETF returns?',
+];
+const ASK_EXAMPLES_CATEGORY = [
+  'What are the best technology ETFs right now?',
+  'Which emerging market ETFs have the strongest outlook?',
+  'What fixed income ETFs make sense in a high rate environment?',
+  'Which commodity ETFs provide the best inflation hedge?',
+];
+const ASK_EXAMPLES_STRATEGY = [
+  'AI stocks are booming — how can I get exposure without chasing a bubble?',
+  'Conservative income ETFs focused on dividends, large funds only',
+  'Aggressive growth ETFs for a 10-year horizon',
+  'Capital preservation strategy for a volatile market',
 ];
 
 // ============================================================================
@@ -261,151 +293,6 @@ function ResultCard({ item, rank, isSelected, onToggle }: {
 // ============================================================================
 // SCREENER — CONFIRMATION CARD
 // ============================================================================
-
-function ConfirmationCard({ parsed, onConfirm, onEditConfirm }: {
-  parsed: ParsedParams; onConfirm:()=>void; onEditConfirm:(r:ScreenerRequest)=>void;
-}): React.ReactElement {
-  const [editMode, setEditMode] = useState(false);
-  const [draft,    setDraft]    = useState<ScreenerRequest>(parsed.request);
-
-  // Reset draft whenever parsed changes (e.g. after refinement)
-  useEffect(() => { setDraft(parsed.request); setEditMode(false); }, [parsed]);
-  const safeFloat = (s:string):number|null => { const f=parseFloat(s); return isNaN(f)?null:f; };
-  const setC = (k:keyof Constraints, v:Constraints[keyof Constraints]) =>
-    setDraft(d=>({...d,constraints:{...d.constraints,[k]:v}}));
-  const chips = constraintChips(parsed.request.constraints);
-
-  const inputCls  = "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent placeholder:text-gray-300";
-  const selectCls = "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent bg-white";
-
-  return (
-    <div className="bg-white border border-blue-200 rounded-xl shadow-sm overflow-hidden">
-      {/* Interpretation header */}
-      <div className="px-4 pt-4 pb-3 border-b border-gray-100 space-y-2 bg-blue-50/40">
-        <div className="flex items-start gap-2">
-          <Sparkles className="w-4 h-4 text-blue-500 mt-0.5 shrink-0"/>
-          <p className="text-sm text-gray-700 leading-relaxed italic">{parsed.interpretation}</p>
-        </div>
-        {parsed.confidence==='high' ? (
-          <div className="flex items-center gap-1.5 text-xs text-emerald-600"><CheckCircle2 className="w-3 h-3"/><span>High confidence</span></div>
-        ) : parsed.confidence==='medium' ? (
-          <div className="flex items-center gap-1.5 text-xs text-amber-600"><AlertCircle className="w-3 h-3"/><span>Medium confidence — some parameters inferred</span></div>
-        ) : (
-          <div className="flex items-center gap-1.5 text-xs text-red-600"><AlertCircle className="w-3 h-3"/><span>Low confidence — please review settings</span></div>
-        )}
-      </div>
-
-      {!editMode ? (
-        <div className="px-4 py-3 space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${OBJ_CLS[parsed.request.objective]}`}>
-              {OBJ_LABEL[parsed.request.objective]}
-            </span>
-            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${RISK_CLS[parsed.request.riskProfile]}`}>
-              {RISK_LABEL[parsed.request.riskProfile]} Risk
-            </span>
-          </div>
-          {chips.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {chips.map(c=>(
-                <span key={c} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border border-gray-200">
-                  {c}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-gray-400">No additional constraints — screening all qualifying ETFs</p>
-          )}
-          <div className="flex gap-2 pt-1">
-            <button onClick={onConfirm}
-              className="flex-1 py-2.5 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-sm">
-              Run Screener →
-            </button>
-            <button onClick={()=>setEditMode(true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700 text-sm rounded-xl transition-colors">
-              <PenLine className="w-3.5 h-3.5"/> Adjust
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="px-4 py-3 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">Objective</label>
-              <select value={draft.objective} onChange={(e)=>setDraft(d=>({...d,objective:e.target.value as Objective}))} className={selectCls}>
-                <option value="growth">Growth</option><option value="income">Income</option><option value="preservation">Preservation</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">Risk Profile</label>
-              <select value={draft.riskProfile} onChange={(e)=>setDraft(d=>({...d,riskProfile:e.target.value as RiskProfile}))} className={selectCls}>
-                <option value="low">Conservative</option><option value="medium">Moderate</option><option value="high">Aggressive</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">Max Expense Ratio (%)</label>
-              <input type="number" placeholder="e.g. 0.50" min="0" max="5" step="0.01"
-                value={draft.constraints.maxExpenseRatio!==null?(draft.constraints.maxExpenseRatio*100).toFixed(2):''}
-                onChange={(e)=>{ const v=safeFloat(e.target.value); setC('maxExpenseRatio',v!==null?v/100:null); }} className={inputCls}/>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">Min AUM ($B)</label>
-              <input type="number" placeholder="e.g. 1" min="0" step="0.1"
-                value={draft.constraints.minAUM!==null?(draft.constraints.minAUM/1e9).toFixed(1):''}
-                onChange={(e)=>{ const v=safeFloat(e.target.value); setC('minAUM',v!==null?v*1e9:null); }} className={inputCls}/>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">Min Sharpe Ratio</label>
-              <input type="number" placeholder="e.g. 0.5" step="0.1" min="0"
-                value={draft.constraints.minSharpe??''}
-                onChange={(e)=>setC('minSharpe',e.target.value?safeFloat(e.target.value):null)} className={inputCls}/>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">Max Volatility (%)</label>
-              <input type="number" placeholder="e.g. 20" min="0" max="100" step="1"
-                value={draft.constraints.maxVolatility!==null?(draft.constraints.maxVolatility*100).toFixed(0):''}
-                onChange={(e)=>{ const v=safeFloat(e.target.value); setC('maxVolatility',v!==null?v/100:null); }} className={inputCls}/>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">Min 3Y Return (%)</label>
-              <input type="number" placeholder="e.g. 10" step="1"
-                value={draft.constraints.minReturn3Y!==null?(draft.constraints.minReturn3Y*100).toFixed(0):''}
-                onChange={(e)=>{ const v=safeFloat(e.target.value); setC('minReturn3Y',v!==null?v/100:null); }} className={inputCls}/>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">Min 5Y Return (%)</label>
-              <input type="number" placeholder="e.g. 8" step="1"
-                value={draft.constraints.minReturn5Y!==null?(draft.constraints.minReturn5Y*100).toFixed(0):''}
-                onChange={(e)=>{ const v=safeFloat(e.target.value); setC('minReturn5Y',v!==null?v/100:null); }} className={inputCls}/>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-500 block mb-1">ESG Preference</label>
-            <select value={draft.constraints.esgPreference} onChange={(e)=>setC('esgPreference',e.target.value as EsgPref)} className={selectCls}>
-              <option value="no_preference">No preference</option><option value="prefer">Prefer ESG</option><option value="exclude">Exclude ESG</option>
-            </select>
-          </div>
-          <div className="flex gap-2 pt-1">
-            <button onClick={()=>{onEditConfirm(draft);setEditMode(false);}}
-              className="flex-1 py-2.5 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors">
-              Run with these settings →
-            </button>
-            <button onClick={()=>setEditMode(false)}
-              className="px-4 py-2.5 border border-gray-200 text-gray-500 text-sm rounded-xl hover:text-gray-700 transition-colors">
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ============================================================================
 // ADVISOR — REC CARD
@@ -603,11 +490,9 @@ function LoadingRow({ label }: { label:string }): React.ReactElement {
 export default function ResearchPage(): React.ReactElement {
   const [tab, setTab] = useState<TabMode>('screen');
 
-  // Screener state
+  // Find ETFs state
+  const [findLimit,  setFindLimit]  = useState<10|50>(10);
   const [screenMode, setScreenMode] = useState<ScreenMode>('idle');
-  const [query,      setQuery]      = useState('');
-  const [refineText, setRefineText] = useState('');
-  const [parsed,     setParsed]     = useState<ParsedParams|null>(null);
   const [activeReq,  setActiveReq]  = useState<ScreenerRequest|null>(null);
   const [results,    setResults]    = useState<ScreenerResponse|null>(null);
   const [screenErr,  setScreenErr]  = useState<string|null>(null);
@@ -623,7 +508,6 @@ export default function ResearchPage(): React.ReactElement {
 
   const router    = useRouter();
   const bottomRef = useRef<HTMLDivElement>(null);
-  const screenRef = useRef<HTMLTextAreaElement>(null);
   const askRef    = useRef<HTMLTextAreaElement>(null);
 
   // Screener: when results land, scroll to anchor so #1 result is at top of viewport
@@ -639,7 +523,7 @@ export default function ResearchPage(): React.ReactElement {
       const t = setTimeout(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}); }, 80);
       return ()=>clearTimeout(t);
     }
-  }, [screenMode, parsed, results, screenErr, tab]);
+  }, [screenMode, results, screenErr, tab]);
 
   // On new assistant message: scroll to top of results (just below input)
   useEffect(()=>{
@@ -656,19 +540,6 @@ export default function ResearchPage(): React.ReactElement {
     setSelected(prev=>{ const n=new Set(prev); n.has(ticker)?n.delete(ticker):n.size<15&&n.add(ticker); return n; });
   }
 
-  const parseQuery = useCallback(async (q:string, previous?:ScreenerRequest, hint?:FeedbackHint):Promise<void> => {
-    setScreenErr(null); setScreenMode('parsing');
-    try {
-      const res = await fetch(`${API_URL}/api/ai-screener/nlp`,{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({query:q, previousRequest:previous, feedbackHint:hint}),
-      });
-      if(!res.ok){const b=await res.json().catch(()=>({})) as {error?:string}; throw new Error(b.error??`Error ${res.status}`);}
-      const data=await res.json() as ParsedParams;
-      setParsed(data); setScreenMode('confirming');
-    } catch(err){ setScreenErr(err instanceof Error?err.message:'Something went wrong'); setScreenMode('idle'); }
-  },[]);
-
   const runScreener = useCallback(async (req:ScreenerRequest):Promise<void> => {
     setScreenErr(null); setScreenMode('screening'); setActiveReq(req); setResults(null); setSelected(new Set());
     try {
@@ -682,10 +553,9 @@ export default function ResearchPage(): React.ReactElement {
     } catch(err){ setScreenErr(err instanceof Error?err.message:'Failed to run screener'); setScreenMode('confirming'); }
   },[]);
 
-  function handleScreenReset(skipFocus = false) {
-    setScreenMode('idle'); setQuery(''); setRefineText('');
-    setParsed(null); setActiveReq(null); setResults(null); setScreenErr(null); setSelected(new Set()); setCurrentPage(1);
-    if (!skipFocus) setTimeout(()=>screenRef.current?.focus(), 100);
+  function handleScreenReset() {
+    setScreenMode('idle'); setActiveReq(null); setResults(null);
+    setScreenErr(null); setSelected(new Set()); setCurrentPage(1);
   }
 
   // ── Advisor ───────────────────────────────────────────────────────────────
@@ -713,7 +583,7 @@ export default function ResearchPage(): React.ReactElement {
     } finally { setAskLoading(false); setTimeout(()=>askRef.current?.focus(),100); }
   },[askLoading,messages]);
 
-  const isScreenBusy = screenMode==='parsing'||screenMode==='screening';
+  const isScreenBusy = screenMode==='screening';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -730,7 +600,7 @@ export default function ResearchPage(): React.ReactElement {
               <p className="text-sm text-gray-500 mt-0.5">Screen ETFs or ask any market question</p>
             </div>
           </div>
-          <button onClick={()=>{ handleScreenReset(true); setMessages([]); setAskInput(''); setAskError(null); }}
+          <button onClick={()=>{ handleScreenReset(); setMessages([]); setAskInput(''); setAskError(null); }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg text-xs transition-colors bg-white">
             <RefreshCw className="w-3.5 h-3.5"/> Reset
           </button>
@@ -752,10 +622,10 @@ export default function ResearchPage(): React.ReactElement {
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
           <div className="p-1 flex gap-1">
             {([
-              { key:'screen' as TabMode, label:'Screen ETFs', icon:<Zap           className="w-4 h-4"/> },
-              { key:'ask'    as TabMode, label:'Ask ETF',     icon:<MessageSquare className="w-4 h-4"/> },
+              { key:'screen' as TabMode, label:'Find ETFs', icon:<Zap           className="w-4 h-4"/> },
+              { key:'ask'    as TabMode, label:'Ask ETF',   icon:<MessageSquare className="w-4 h-4"/> },
             ]).map(t=>(
-              <button key={t.key} onClick={()=>{ setTab(t.key); if(t.key!=='screen') handleScreenReset(true); }}
+              <button key={t.key} onClick={()=>{ setTab(t.key); if(t.key!=='screen') handleScreenReset(); }}
                 className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
                   tab===t.key
                     ? 'bg-blue-600 text-white shadow-sm'
@@ -767,126 +637,61 @@ export default function ResearchPage(): React.ReactElement {
             ))}
           </div>
           <div className="flex px-1 pb-2.5">
-            <span className="flex-1 text-center text-xs text-gray-400">Filter by criteria</span>
+            <span className="flex-1 text-center text-xs text-gray-400">Direct DB search</span>
             <span className="flex-1 text-center text-xs text-gray-400">Chat with AI</span>
           </div>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════ */}
-        {/* SCREEN ETFs TAB                                                   */}
+        {/* FIND ETFs TAB                                                     */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         {tab==='screen' && (
           <>
-            {/* Input box — idle state only */}
+            {/* Quick-select buttons — idle state only */}
             {screenMode==='idle' && (
-              <div className="space-y-3">
-                <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">
-                    What are you looking for?
-                  </label>
-                  <div className="relative">
-                    <textarea ref={screenRef} value={query}
-                      onChange={(e:React.ChangeEvent<HTMLTextAreaElement>)=>setQuery(e.target.value)}
-                      onKeyDown={(e:React.KeyboardEvent<HTMLTextAreaElement>)=>{
-                        if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); if(query.trim()) void parseQuery(query.trim());}
-                      }}
-                      placeholder="e.g. Low-cost broad market ETFs with good 3-year returns and low volatility…"
-                      rows={3} disabled={isScreenBusy}
-                      className="w-full px-4 py-3 pr-14 text-sm border border-gray-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent disabled:opacity-50 disabled:bg-gray-50 placeholder:text-gray-300"/>
-                    <button onClick={()=>{ if(query.trim()) void parseQuery(query.trim()); }}
-                      disabled={!query.trim()||isScreenBusy}
-                      className="absolute right-3 bottom-3 p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors">
-                      <Send className="w-4 h-4"/>
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-2">↵ Enter to search · Shift+Enter for new line</p>
-                </div>
+              <div className="space-y-4">
 
-                {/* Examples */}
-                <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Example searches</p>
-                  <div className="space-y-2">
-                    {SCREEN_EXAMPLES.map(ex=>(
-                      <button key={ex} onClick={()=>{setQuery(ex);setTimeout(()=>screenRef.current?.focus(),0);}}
-                        className="w-full text-left text-sm text-gray-600 px-4 py-2.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors">
-                        {ex}
+                {/* Top 10 / Top 50 toggle */}
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-500">Select a category to find ETFs directly from the database</p>
+                  <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+                    {([10, 50] as const).map(n=>(
+                      <button key={n} type="button" onClick={()=>setFindLimit(n)}
+                        className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                          findLimit===n ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                        }`}>
+                        Top {n}
                       </button>
                     ))}
                   </div>
                 </div>
+
+                {/* Button sections */}
+                {(['By Metrics','By Return','By Size'] as const).map(section=>(
+                  <div key={section} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">{section}</p>
+                    <div className="space-y-2">
+                      {FIND_BUTTONS.filter(b=>b.section===section).map(btn=>(
+                        <button key={btn.label} type="button"
+                          onClick={()=>void runScreener({...btn.req, page:1, pageSize:findLimit})}
+                          className="w-full text-left px-4 py-2.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors group">
+                          <span className="text-sm text-gray-700 group-hover:text-blue-700 font-medium">{btn.label}</span>
+                          <span className="text-xs text-gray-400 ml-2">({btn.hint})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Footnote */}
+                <p className="text-xs text-gray-400 text-center">
+                  💡 Results use pre-filters: AUM &gt; $100M · Volume &gt; 100K · Major issuers only · min 3 of 5 core metrics available
+                </p>
               </div>
             )}
 
-            {/* Refine box — pinned at top in results mode so user never has to scroll up */}
-            {screenMode==='results' && results && activeReq && (
-              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Refine results</p>
-                  <button onClick={()=>handleScreenReset(false)}
-                    className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 px-2 py-1 rounded-lg transition-colors">
-                    New search
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {([
-                    {hint:'too_risky' as FeedbackHint,        label:'Less risky'},
-                    {hint:'too_conservative' as FeedbackHint, label:'More aggressive'},
-                    {hint:'too_expensive' as FeedbackHint,    label:'Lower cost'},
-                    {hint:'not_aligned' as FeedbackHint,      label:'Re-evaluate goal'},
-                  ]).map(({hint,label})=>(
-                    <button key={hint} onClick={()=>{
-                      const msg:Record<FeedbackHint,string>={
-                        too_risky:'Make it less risky — prioritize stability and lower volatility',
-                        too_conservative:'Make it more aggressive — I want more upside',
-                        too_expensive:'Lower the cost — reduce expense ratio',
-                        not_aligned:'These results feel misaligned — re-evaluate my goal',
-                      };
-                      setQuery(msg[hint]); void parseQuery(msg[hint],activeReq??undefined,hint);
-                    }} className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-full text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-colors bg-white">
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <input type="text" value={refineText}
-                    onChange={(e:React.ChangeEvent<HTMLInputElement>)=>setRefineText(e.target.value)}
-                    onKeyDown={(e:React.KeyboardEvent<HTMLInputElement>)=>{
-                      if(e.key==='Enter'&&refineText.trim()&&activeReq){
-                        const q=refineText.trim(); setRefineText(''); setQuery(q); void parseQuery(q,activeReq);
-                      }
-                    }}
-                    placeholder="Or describe what you'd change…"
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent placeholder:text-gray-300"/>
-                  <button onClick={()=>{
-                    const q=refineText.trim(); if(!q||!activeReq) return;
-                    setRefineText(''); setQuery(q); void parseQuery(q,activeReq);
-                  }} disabled={!refineText.trim()}
-                    className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors">
-                    <Send className="w-4 h-4"/>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* User query bubble */}
-            {screenMode!=='idle' && query && (
-              <div className="flex justify-end">
-                <div className="max-w-lg bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm shadow-sm">
-                  <p className="text-sm">{query}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Loading states */}
-            {screenMode==='parsing' && <LoadingRow label="Extracting your parameters…"/>}
-            {screenMode==='screening' && <LoadingRow label="Scoring ETFs against your criteria…"/>}
-
-            {/* Confirmation card */}
-            {(screenMode==='confirming'||screenMode==='screening') && parsed && (
-              <ConfirmationCard parsed={parsed}
-                onConfirm={()=>void runScreener(parsed.request)}
-                onEditConfirm={(r)=>void runScreener(r)}/>
-            )}
+            {/* Screening loading state */}
+            {screenMode==='screening' && <LoadingRow label="Finding ETFs from database…"/>}
 
             {/* Error */}
             {screenErr && (
@@ -896,12 +701,19 @@ export default function ResearchPage(): React.ReactElement {
               </div>
             )}
 
-            {/* Results — anchor sits here so scroll lands on #1 result */}
+            {/* Results */}
             {screenMode==='results' && results && (
               <>
                 <div id="screen-results-anchor"/>
 
-                {/* Summary */}
+                {/* Back button + summary */}
+                <div className="flex items-center justify-between">
+                  <button type="button" onClick={()=>handleScreenReset()}
+                    className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg transition-colors bg-white">
+                    ← Back to search
+                  </button>
+                </div>
+
                 <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
                   <p className="text-sm text-gray-700">{results.diagnosisSummary}</p>
                   <p className="text-xs text-gray-400 mt-1 italic">Rankings based on historical data. Not financial advice.</p>
@@ -1011,16 +823,44 @@ export default function ResearchPage(): React.ReactElement {
 
             {/* Empty state examples — shown until first message */}
             {messages.length===0 && !askLoading && (
-              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Example questions</p>
-                <div className="space-y-2">
-                  {ASK_EXAMPLES.map(q=>(
-                    <button key={q} onClick={()=>void sendAsk(q)}
-                      className="w-full text-left text-sm text-gray-600 px-4 py-2.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors">
-                      {q}
-                    </button>
-                  ))}
+              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-5">
+
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Macro &amp; Rates</p>
+                  <div className="space-y-2">
+                    {ASK_EXAMPLES_MACRO.map(q=>(
+                      <button key={q} type="button" onClick={()=>void sendAsk(q)}
+                        className="w-full text-left text-sm text-gray-600 px-4 py-2.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors">
+                        {q}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">By Category</p>
+                  <div className="space-y-2">
+                    {ASK_EXAMPLES_CATEGORY.map(q=>(
+                      <button key={q} type="button" onClick={()=>void sendAsk(q)}
+                        className="w-full text-left text-sm text-gray-600 px-4 py-2.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors">
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">By Strategy</p>
+                  <div className="space-y-2">
+                    {ASK_EXAMPLES_STRATEGY.map(q=>(
+                      <button key={q} type="button" onClick={()=>void sendAsk(q)}
+                        className="w-full text-left text-sm text-gray-600 px-4 py-2.5 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors">
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             )}
 

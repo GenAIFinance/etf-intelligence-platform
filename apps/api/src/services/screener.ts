@@ -10,7 +10,7 @@ import prisma from '../db';
 export type Objective = 'growth' | 'income' | 'preservation';
 export type RiskProfile = 'low' | 'medium' | 'high';
 export type EsgPreference = 'no_preference' | 'prefer' | 'exclude';
-export type SortBy = 'totalScore' | 'expenseRatio' | 'sharpeRatio' | 'volatility';
+export type SortBy = 'totalScore' | 'expenseRatio' | 'sharpeRatio' | 'volatility' | 'annualized3Y' | 'annualized5Y' | 'aum';
 
 export interface ScreenerConstraints {
   excludeSectors: string[];
@@ -489,10 +489,13 @@ export class ScreenerService {
     // Sort
     scored.sort((a, b) => {
       switch (sortBy) {
-        case 'expenseRatio': return (a.expenseRatio ?? Infinity) - (b.expenseRatio ?? Infinity);
-        case 'sharpeRatio':  return (b.sharpeRatio ?? 0) - (a.sharpeRatio ?? 0);
-        case 'volatility':   return (a.volatility ?? 1) - (b.volatility ?? 1);
-        default:             return b.totalScore - a.totalScore;
+        case 'expenseRatio':  return (a.expenseRatio  ?? Infinity) - (b.expenseRatio  ?? Infinity);
+        case 'sharpeRatio':   return (b.sharpeRatio   ?? 0)        - (a.sharpeRatio   ?? 0);
+        case 'volatility':    return (a.volatility    ?? 1)        - (b.volatility    ?? 1);
+        case 'annualized3Y':  return (b.annualized3Y  ?? -Infinity) - (a.annualized3Y  ?? -Infinity);
+        case 'annualized5Y':  return (b.annualized5Y  ?? -Infinity) - (a.annualized5Y  ?? -Infinity);
+        case 'aum':           return (b.aum           ?? 0)        - (a.aum           ?? 0);
+        default:              return b.totalScore - a.totalScore;
       }
     });
 
