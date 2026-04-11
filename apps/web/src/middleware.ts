@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const AUTH_COOKIE  = 'etf_auth';
 const LOGIN_PATH   = '/login';
-const PUBLIC_PATHS = [LOGIN_PATH, '/api/auth/login', '/api/auth/heartbeat', '/api/auth/logout'];
+const PUBLIC_PATHS = [LOGIN_PATH, '/api/auth/login', '/api/auth/invite', '/api/auth/heartbeat', '/api/auth/logout'];
 
 // Inlined — does NOT import from lib/auth.ts to avoid stale-deploy issues
 function isValidSession(value: string | undefined): boolean {
