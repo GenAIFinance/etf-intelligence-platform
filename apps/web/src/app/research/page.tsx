@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import WelcomeBanner from '@/components/WelcomeBanner';
 import {
-  ArrowLeft, RefreshCw, ChevronDown, ChevronUp, ExternalLink,
+  RefreshCw, ChevronDown, ChevronUp, ExternalLink,
   Send, AlertCircle, Loader2,
   Zap, MessageSquare, TrendingUp, TrendingDown, Minus, ShieldAlert,
   BarChart2, XCircle, Lightbulb, Info, AlertTriangle,
@@ -594,9 +594,6 @@ export default function ResearchPage(): React.ReactElement {
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-5">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded-lg hover:bg-gray-100">
-              <ArrowLeft className="w-5 h-5"/>
-            </Link>
             <div>
               <h1 className="text-xl font-bold text-gray-900">AI Research</h1>
               <p className="text-sm text-gray-500 mt-0.5">Screen ETFs or ask any market question</p>

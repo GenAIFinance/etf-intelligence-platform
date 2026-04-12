@@ -340,7 +340,7 @@ function ComparePageInner() {
 
         {/* Header */}
         <div>
-          <Link href="/" className="text-sm text-blue-600 hover:text-blue-700 mb-2 inline-block">← Back to Dashboard</Link>
+          <Link href="/" className="text-sm text-blue-600 hover:text-blue-700 mb-2 inline-block">← Home</Link>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
             <BarChart3 className="w-8 h-8 text-blue-600"/> ETF Comparison
           </h1>
