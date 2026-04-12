@@ -10,6 +10,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import WelcomeBanner from '@/components/WelcomeBanner';
 import {
   ArrowLeft, RefreshCw, ChevronDown, ChevronUp, ExternalLink,
   Send, AlertCircle, Loader2,
@@ -618,6 +619,20 @@ export default function ResearchPage(): React.ReactElement {
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-6 pb-16 space-y-5">
+
+        {/* Welcome banner — shown once to first-time users */}
+        <WelcomeBanner
+          pageKey="research"
+          title="AI Research"
+          description="Two ways to explore 6,800+ ETFs — instant database search with no AI cost, or a conversational AI adviser for deeper questions."
+          bullets={[
+            { text: 'Find ETFs tab: click any button to instantly rank ETFs by cost, return, or size — results come directly from the database, no AI needed' },
+            { text: 'Ask ETF tab: type any question about macro trends, specific ETF categories, or portfolio strategies — powered by AI with real data from our database' },
+            { text: 'In Find ETFs, use the Top 10 / Top 50 toggle to control how many results you see' },
+            { text: 'In Ask ETF, select a section pill (Macro & Rates, By Category, By Strategy) to get the most relevant answer style for your question' },
+          ]}
+          startLabel="Find ETFs now"
+        />
 
         {/* ── Two-tab toggle ───────────────────────────────────────────────── */}
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm">

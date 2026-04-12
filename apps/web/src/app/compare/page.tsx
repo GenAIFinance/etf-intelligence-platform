@@ -20,6 +20,7 @@ import {
   Info, CheckCircle2, Layers, ChevronDown,
 } from 'lucide-react';
 import Link from 'next/link';
+import WelcomeBanner from '@/components/WelcomeBanner';
 
 export const dynamic = 'force-dynamic';
 
@@ -345,6 +346,20 @@ function ComparePageInner() {
           </h1>
           <p className="text-gray-500 mt-1 text-sm">Compare up to 15 ETFs across performance, risk, cost, and holdings</p>
         </div>
+
+        {/* Welcome banner — shown once to first-time users */}
+        <WelcomeBanner
+          pageKey="compare"
+          title="ETF Comparison"
+          description="Compare up to 4 ETFs side by side — performance, risk, cost, and holdings — all in one view."
+          bullets={[
+            { text: 'Enter up to 4 tickers in the boxes below (e.g. SPY, QQQ, VTI, IVV) then click Compare' },
+            { text: 'Use the quick-select buttons (S&P 500, Growth, Bonds) to load popular comparisons instantly' },
+            { text: 'Scroll down to see the performance chart, risk metrics table, and holdings overlap' },
+            { text: 'The best value in each metric row is highlighted in green — lower is better for cost and risk, higher is better for returns' },
+          ]}
+          startLabel="Load a popular comparison"
+        />
 
         {/* Input */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">

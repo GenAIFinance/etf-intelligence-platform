@@ -43,7 +43,7 @@ export async function GET(
 
   // ── Look up the token ────────────────────────────────────────────────────
   const lookupRes = await supabaseFetch(
-    `/invite_tokens?token=eq.${encodeURIComponent(token)}&select=token,label,used_at,expires_at&limit=1`
+    `/invite_tokens?token=eq.${encodeURIComponent(token)}&select=token,label,dest,used_at,expires_at&limit=1`
   );
 
   if (!lookupRes.ok) {
@@ -53,6 +53,7 @@ export async function GET(
   const rows: Array<{
     token: string;
     label: string;
+    dest:  string;
     used_at: string | null;
     expires_at: string;
   }> = await lookupRes.json();
@@ -86,8 +87,9 @@ export async function GET(
   const username  = (row.label.trim().slice(0, 50)) || 'Guest';
   const sessionId = crypto.randomUUID();
 
-  // ── Redirect to dashboard with auth cookies set ──────────────────────────
-  const response = NextResponse.redirect(new URL('/', request.url));
+  // ── Redirect to destination with auth cookies set ────────────────────────
+  const destination = row.dest?.startsWith('/') ? row.dest : '/';
+  const response = NextResponse.redirect(new URL(destination, request.url));
 
   response.cookies.set(AUTH_COOKIE, `${username}:${sessionId}`, {
     httpOnly: true, secure: true, sameSite: 'lax',

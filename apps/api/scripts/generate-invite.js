@@ -8,6 +8,8 @@
  *
  *   node generate-invite.js "Reddit user John"
  *   node generate-invite.js "LinkedIn contact Sarah" --days 7
+ *   node generate-invite.js "Compare tester" --dest /compare
+ *   node generate-invite.js "Research tester" --dest /research --days 14
  *
  * Options:
  *   --days N    Token expiry in days (default: 30)
@@ -46,13 +48,16 @@ const daysIdx  = args.indexOf('--days');
 const days     = daysIdx >= 0 && args[daysIdx + 1] ? parseInt(args[daysIdx + 1], 10) : 30;
 const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
+const destIdx  = args.indexOf('--dest');
+const dest     = destIdx >= 0 && args[destIdx + 1] ? args[destIdx + 1] : '/';
+
 // ── Generate token ────────────────────────────────────────────────────────────
 
 const token = crypto.randomBytes(24).toString('hex'); // 48 char hex token
 
 // ── Insert into Supabase ──────────────────────────────────────────────────────
 
-const body = JSON.stringify({ token, label, expires_at: expiresAt });
+const body = JSON.stringify({ token, label, dest, expires_at: expiresAt });
 
 const url    = new URL(`${SUPABASE_URL}/rest/v1/invite_tokens`);
 const options = {
@@ -72,6 +77,7 @@ const req = https.request(options, (res) => {
   if (res.statusCode === 201 || res.statusCode === 200) {
     console.log('\n✅ Invite token created\n');
     console.log(`  Label:   ${label}`);
+    console.log(`  Dest:    ${dest}`);
     console.log(`  Expires: ${new Date(expiresAt).toDateString()} (${days} days)`);
     console.log(`  Token:   ${token}`);
     console.log(`\n  🔗 Invite link:`);

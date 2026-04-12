@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Info, Bot, GitCompare, Eye } from 'lucide-react';
+import { BarChart3, Info, Bot, GitCompare } from 'lucide-react';
 import { useHeartbeat } from '../hooks/useHeartbeat';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -18,7 +18,6 @@ function Navigation() {
     { href: '/about', label: 'About', icon: Info },
     { href: '/research', label: 'AI Research', icon: Bot },
     { href: '/compare', label: 'Compare', icon: GitCompare },
-    { href: '/monitor', label: 'Monitor', icon: Eye },
   ];
 
   return (
