@@ -500,6 +500,7 @@ export default function ResearchPage(): React.ReactElement {
   const [selected,   setSelected]   = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
+  const STORAGE_KEY = 'etf_find_state';
 
   // Advisor state
   const [askSection, setAskSection] = useState<'macro-rates'|'by-category'|'by-strategy'>('macro-rates');
@@ -511,6 +512,20 @@ export default function ResearchPage(): React.ReactElement {
   const router    = useRouter();
   const bottomRef = useRef<HTMLDivElement>(null);
   const askRef    = useRef<HTMLTextAreaElement>(null);
+
+  // ── Restore Find ETFs results when navigating back from ETF detail ──────────
+  useEffect(()=>{
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const { req, data } = JSON.parse(saved) as { req: ScreenerRequest; data: ScreenerResponse };
+        setActiveReq(req);
+        setResults(data);
+        setFindLimit((req.pageSize === 50 ? 50 : 10) as 10|50);
+        setScreenMode('results');
+      }
+    } catch { /* ignore — private browsing or parse error */ }
+  }, []);
 
   // Screener: when results land, scroll to anchor so #1 result is at top of viewport
   useEffect(()=>{
@@ -552,10 +567,12 @@ export default function ResearchPage(): React.ReactElement {
       if(!res.ok) throw new Error(`Screener error ${res.status}`);
       const data=await res.json() as ScreenerResponse;
       setResults(data); setScreenMode('results'); setCurrentPage(1);
+      try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ req, data })); } catch { /* ignore — quota or private browsing */ }
     } catch(err){ setScreenErr(err instanceof Error?err.message:'Failed to run screener'); setScreenMode('confirming'); }
   },[]);
 
   function handleScreenReset() {
+    try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     setScreenMode('idle'); setActiveReq(null); setResults(null);
     setScreenErr(null); setSelected(new Set()); setCurrentPage(1);
   }
