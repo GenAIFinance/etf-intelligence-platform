@@ -173,7 +173,7 @@ export default function AboutPage() {
                   <iframe
                     src={`https://www.youtube.com/embed/${video.youtubeId}`}
                     title={video.title}
-                    className="w-full h-full"
+                    className="absolute inset-0 w-full h-full"
                     allowFullScreen
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                   />
