@@ -19,7 +19,7 @@ const NAV_VIDEOS = [
     title: 'How to Use Ask ETF',
     description: 'Ask any question about macro trends, ETF categories, or portfolio strategies. Learn how to use the section pills to get the most relevant AI response.',
     duration: null as string | null,
-    youtubeId: null as string | null,
+    youtubeId: 'FhjvMCECFKI',
   },
   {
     id: 3,
