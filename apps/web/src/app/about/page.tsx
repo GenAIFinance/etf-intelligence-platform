@@ -58,7 +58,7 @@ const FEATURES = [
 
 export default function AboutPage() {
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-14">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-14">
 
       {/* ── Section 1: What is ETF Intelligence ──────────────────────────── */}
       <section>
