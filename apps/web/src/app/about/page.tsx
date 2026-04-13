@@ -168,14 +168,14 @@ export default function AboutPage() {
               key={video.id}
               className="bg-white rounded-xl shadow-sm border border-gray-200 p-4"
             >
-              <div className="relative aspect-video bg-gray-100 rounded-lg mb-3">
+              <div className="relative aspect-video bg-gray-100 rounded-lg mb-3 overflow-hidden">
                 {video.youtubeId ? (
                   <iframe
                     src={`https://www.youtube.com/embed/${video.youtubeId}`}
                     title={video.title}
-                    className="absolute inset-0 w-full h-full"
+                    className="w-full h-full"
                     allowFullScreen
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center gap-2">
