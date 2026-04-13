@@ -168,7 +168,7 @@ export default function AboutPage() {
               key={video.id}
               className="bg-white rounded-xl shadow-sm border border-gray-200 p-4"
             >
-              <div className="relative aspect-video bg-gray-100 rounded-lg mb-3 overflow-hidden">
+              <div className="relative aspect-video bg-gray-100 rounded-lg mb-3">
                 {video.youtubeId ? (
                   <iframe
                     src={`https://www.youtube.com/embed/${video.youtubeId}`}
