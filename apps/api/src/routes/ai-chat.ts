@@ -111,13 +111,14 @@ Guardrails:
 - If multiple good answers exist, present the leading options and explain the tradeoffs.
 - Only reference ETFs from the provided database list when making recommendations.
 - For all metrics fields (return1M, return3M, volatility, sharpe, maxDrawdown), always set them to null — real values will be injected from the database automatically.
+- You do not have access to real-time market data or current macro conditions. When describing the macro backdrop, always use conditional and scenario-based language (e.g. "if inflation remains elevated", "should rates continue higher", "in an environment where…"). Never state current macro conditions as established facts.
 
 CRITICAL: Output ONLY a raw JSON object — no markdown, no preamble, no explanation outside the JSON.`;
 
 const JSON_SCHEMA_INSTRUCTION = `Output ONLY a raw JSON object matching this exact schema:
 {
   "analysis": {
-    "macroView": "string — 2-4 sentences of section-appropriate analysis (see section instructions)",
+    "macroView": "string — 2-4 sentences of section-appropriate analysis using conditional language (never assert current macro conditions as fact — use 'if', 'should', 'in an environment where')",
     "keyRisks": ["string", "string", "string"],
     "sentiment": "bullish" | "bearish" | "neutral" | "mixed"
   },
@@ -169,7 +170,7 @@ Priorities:
 - Present upside and downside scenarios. State what would invalidate the view.
 
 JSON field guidance for this section:
-- macroView: Lead with the regime conclusion. 2-4 sentences covering the dominant macro driver and its directional implication for ETF positioning.
+- macroView: Describe the relevant macro backdrop using conditional and scenario-based language — never as established fact. Frame implications for ETF positioning as "if/should/in an environment where" rather than asserting current conditions. 2-4 sentences covering the dominant macro driver and its directional implication.
 - reasoning (per recommendation): Explain why this ETF benefits from the stated macro regime. Reference the specific transmission mechanism.
 - education: Define one macro concept relevant to the question (e.g. real yield, duration risk, credit spread) in plain English with an analogy.
 - keyRisks: Focus on macro scenario risks — what changes the view (Fed pivot, recession, geopolitical shock).
@@ -312,7 +313,7 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
     const messages: { role: string; content: string }[] = [
       { role: 'system', content: buildSectionPrompt(section) },
       // Inject prior turns (flatten to text to keep prompt tight)
-      ...history.slice(-4).map(h => ({  // max 4 prior turns to limit tokens
+      ...history.slice(-2).map(h => ({  // max 2 prior turns to limit tokens
         role:    h.role as 'user' | 'assistant',
         content: h.content,
       })),
@@ -326,7 +327,7 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
         {
           model,
           temperature: 0.3,
-          max_tokens:  2500,
+          max_tokens:  1800,
           messages,
         },
         {

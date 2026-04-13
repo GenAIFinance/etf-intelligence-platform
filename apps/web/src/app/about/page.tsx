@@ -12,7 +12,7 @@ const NAV_VIDEOS = [
     title: 'How to Find ETFs',
     description: 'Use the Find ETFs screener to instantly rank 6,800+ ETFs by cost, return, Sharpe ratio, or size — directly from the database with no AI needed.',
     duration: null as string | null,
-    youtubeId: null as string | null,
+    youtubeId: 'q4vt-lghYac',
   },
   {
     id: 2,
