@@ -26,7 +26,7 @@ const NAV_VIDEOS = [
     title: 'How to Compare ETFs',
     description: 'Enter up to 4 ETF tickers to compare returns, risk metrics, expense ratios, and holdings side by side — with the best values highlighted automatically.',
     duration: null as string | null,
-    youtubeId: null as string | null,
+    youtubeId: '97G9Asd0508',
   },
 ];
 
@@ -175,7 +175,7 @@ export default function AboutPage() {
                     title={video.title}
                     className="w-full h-full"
                     allowFullScreen
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                   />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center gap-2">
