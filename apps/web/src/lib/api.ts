@@ -7,13 +7,15 @@ const api = axios.create({
   timeout: 30000,
 });
 
-// Attach username + session ID to every Railway request for activity tracking
+// Attach visitor ID to every Railway request for activity tracking
 api.interceptors.request.use((config) => {
   if (typeof document !== 'undefined') {
-    const userMatch    = document.cookie.match(/(?:^|;\s*)etf_user=([^;]+)/);
-    const sessionMatch = document.cookie.match(/(?:^|;\s*)etf_session=([^;]+)/);
-    if (userMatch)    config.headers['x-username']   = decodeURIComponent(userMatch[1]);
-    if (sessionMatch) config.headers['x-session-id'] = decodeURIComponent(sessionMatch[1]);
+    const visitorMatch = document.cookie.match(/(?:^|;\s*)etf_visitor=([^;]+)/);
+    if (visitorMatch) {
+      const visitorId = decodeURIComponent(visitorMatch[1]);
+      config.headers['x-username']   = visitorId;
+      config.headers['x-session-id'] = visitorId;
+    }
   }
   return config;
 });
@@ -24,20 +26,17 @@ api.interceptors.request.use((config) => {
 
 export function trackEvent(eventType: string, eventData: Record<string, unknown> = {}): void {
   if (typeof document === 'undefined') return;
-  const userMatch    = document.cookie.match(/(?:^|;\s*)etf_user=([^;]+)/);
-  const sessionMatch = document.cookie.match(/(?:^|;\s*)etf_session=([^;]+)/);
-  if (!userMatch || !sessionMatch) return;
-
-  const username  = decodeURIComponent(userMatch[1]);
-  const sessionId = decodeURIComponent(sessionMatch[1]);
+  const visitorMatch = document.cookie.match(/(?:^|;\s*)etf_visitor=([^;]+)/);
+  if (!visitorMatch) return;
+  const visitorId = decodeURIComponent(visitorMatch[1]);
 
   // Fire-and-forget — never blocks UI
   fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/api/events`, {
     method:  'POST',
     headers: {
       'Content-Type':  'application/json',
-      'x-username':    username,
-      'x-session-id':  sessionId,
+      'x-username':    visitorId,
+      'x-session-id':  visitorId,
     },
     body: JSON.stringify({ eventType, eventData }),
   }).catch(() => { /* silent */ });
