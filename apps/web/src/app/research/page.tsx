@@ -542,12 +542,12 @@ export default function ResearchPage(): React.ReactElement {
     }
   }, [screenMode, results, screenErr, tab]);
 
-  // On new assistant message: scroll to top of results (just below input)
+  // On new assistant message: scroll to bottom so latest response is immediately visible
   useEffect(()=>{
     const last = messages[messages.length - 1];
     if (!last || last.role !== 'assistant') return;
     const t = setTimeout(()=>{
-      document.getElementById('ask-results-anchor')?.scrollIntoView({behavior:'smooth', block:'start'});
+      bottomRef.current?.scrollIntoView({behavior:'smooth', block:'end'});
     }, 80);
     return ()=>clearTimeout(t);
   }, [messages]);
