@@ -829,7 +829,7 @@ export default function ResearchPage(): React.ReactElement {
         {tab==='ask' && (
           <>
             {/* Ask input — pinned at top so refinement is always reachable */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <div className="sticky top-16 z-40 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
               {/* Active section pill */}
               <div className="flex gap-1.5 mb-3">
                 {([
