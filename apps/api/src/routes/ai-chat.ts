@@ -46,13 +46,17 @@ export interface RecommendationMetrics {
 }
 
 export interface Recommendation {
-  ticker:     string;
-  name:       string;
-  allocation: number | null;
-  reasoning:  string;
-  risks:      string;
-  profile:    string[];
-  metrics:    RecommendationMetrics;
+  ticker:             string;
+  name:               string;
+  allocation:         number | null;
+  reasoning:          string;
+  risks:              string;
+  profile:            string[];
+  metrics:            RecommendationMetrics;
+  recommended_action: 'initiate_position' | 'add_on_weakness' | 'maintain_position' | 'reduce_exposure' | 'place_on_watchlist' | 'reassess_thesis' | 'exit';
+  portfolio_action:   'buy' | 'add' | 'hold' | 'trim' | 'sell' | 'monitor';
+  watchlist_flag:     boolean;
+  outcome_note:       string;
 }
 
 export interface AvoidItem {
@@ -112,13 +116,15 @@ Guardrails:
 - Only reference ETFs from the provided database list when making recommendations.
 - For all metrics fields (return1M, return3M, volatility, sharpe, maxDrawdown), always set them to null — real values will be injected from the database automatically.
 - You do not have access to real-time market data or current macro conditions. When describing the macro backdrop, always use conditional and scenario-based language (e.g. "if inflation remains elevated", "should rates continue higher", "in an environment where…"). Never state current macro conditions as established facts.
+- When conversation history is present, build directly on the previous analysis. Reference prior recommendations and deepen or refine the view — do not start from scratch. If the user is drilling into a specific ETF, aspect, or scenario, focus your response on that without repeating the full prior analysis.
+- Before finalizing your JSON output, self-check every recommendation for: schema compliance, cross-field consistency (recommended_action must align with portfolio_action and watchlist_flag), and that reasoning explicitly states a thesis, key risk, and what would invalidate the current view.
 
 CRITICAL: Output ONLY a raw JSON object — no markdown, no preamble, no explanation outside the JSON.`;
 
 const JSON_SCHEMA_INSTRUCTION = `Output ONLY a raw JSON object matching this exact schema:
 {
   "analysis": {
-    "macroView": "string — 2-4 sentences of section-appropriate analysis using conditional language (never assert current macro conditions as fact — use 'if', 'should', 'in an environment where')",
+    "macroView": "string — 3-5 sentences of section-appropriate analysis using conditional language (never assert current macro conditions as fact — use 'if', 'should', 'in an environment where')",
     "keyRisks": ["string", "string", "string"],
     "sentiment": "bullish" | "bearish" | "neutral" | "mixed"
   },
@@ -127,8 +133,8 @@ const JSON_SCHEMA_INSTRUCTION = `Output ONLY a raw JSON object matching this exa
       "ticker": "string",
       "name": "string",
       "allocation": number | null,
-      "reasoning": "string — why this ETF fits (see section instructions for emphasis)",
-      "risks": "string — specific downside risks",
+      "reasoning": "string — 3-6 sentences of analyst recommendation prose: state the position action, rationale (why this ETF for this objective or environment), key risks to the thesis, and what conditions would trigger a reassessment or exit. This is the primary field for decision-useful analysis.",
+      "risks": "string — specific downside risks for this ETF",
       "profile": ["Growth" | "Income" | "Preservation"],
       "metrics": {
         "return1M": null,
@@ -136,7 +142,11 @@ const JSON_SCHEMA_INSTRUCTION = `Output ONLY a raw JSON object matching this exa
         "volatility": null,
         "sharpe": null,
         "maxDrawdown": null
-      }
+      },
+      "recommended_action": "initiate_position" | "add_on_weakness" | "maintain_position" | "reduce_exposure" | "place_on_watchlist" | "reassess_thesis" | "exit",
+      "portfolio_action": "buy" | "add" | "hold" | "trim" | "sell" | "monitor",
+      "watchlist_flag": true | false,
+      "outcome_note": "string — 1-2 sentences forward-looking conditional statement on what to expect or monitor (e.g. 'If rate expectations shift dovish, this position should benefit from duration expansion.')"
     }
   ],
   "avoid": [
@@ -155,7 +165,13 @@ const JSON_SCHEMA_INSTRUCTION = `Output ONLY a raw JSON object matching this exa
     "filters": ["string — each filter or criterion applied"]
   },
   "disclaimer": "This analysis is for educational and informational purposes only. It does not constitute investment advice, a solicitation, or a recommendation to buy or sell any security. Past performance does not guarantee future results. Always consult a qualified financial advisor before making investment decisions."
-}`;
+}
+
+Cross-field consistency rules (enforce strictly):
+- If recommended_action is reduce_exposure, exit, or place_on_watchlist → portfolio_action must be trim, sell, or monitor and watchlist_flag should be true.
+- If recommended_action is initiate_position, add_on_weakness, or maintain_position → portfolio_action must be buy, add, or hold and watchlist_flag should generally be false.
+- If recommended_action is reassess_thesis → portfolio_action must be monitor and watchlist_flag must be true.
+- reasoning must explicitly contain: a thesis statement, at least one risk trigger, and one condition that would invalidate the current view.`;
 
 const SECTION_OVERLAY_MACRO_RATES = `
 Section role: Top-down ETF strategist focused on macro regime interpretation.
@@ -171,7 +187,7 @@ Priorities:
 
 JSON field guidance for this section:
 - macroView: Describe the relevant macro backdrop using conditional and scenario-based language — never as established fact. Frame implications for ETF positioning as "if/should/in an environment where" rather than asserting current conditions. 2-4 sentences covering the dominant macro driver and its directional implication.
-- reasoning (per recommendation): Explain why this ETF benefits from the stated macro regime. Reference the specific transmission mechanism.
+- reasoning (per recommendation): 3-6 sentences — state why this ETF benefits from the stated macro regime, explain the specific transmission mechanism, identify what would break the thesis (e.g. a Fed pivot, recession signal), and what conditions would trigger a reassessment.
 - education: Define one macro concept relevant to the question (e.g. real yield, duration risk, credit spread) in plain English with an analogy.
 - keyRisks: Focus on macro scenario risks — what changes the view (Fed pivot, recession, geopolitical shock).
 
@@ -193,7 +209,7 @@ Priorities for ranking and selection:
 
 JSON field guidance for this section:
 - macroView: Briefly characterize the category — what it covers, what drives it, and any current tailwind or headwind worth noting. Keep it 2 sentences maximum.
-- reasoning (per recommendation): Explain this ETF's best use case within the category. Distinguish it from alternatives on cost, liquidity, exposure, or methodology — not generic praise.
+- reasoning (per recommendation): 3-6 sentences — explain this ETF's best use case within the category, distinguish it from alternatives on cost, liquidity, exposure, or methodology, state what risk could undermine the thesis, and what would trigger a reassessment or switch to an alternative.
 - education: Define one category-specific concept (e.g. tracking error, index reconstitution, concentration risk) with a plain English analogy.
 - keyRisks: Focus on category-level risks — concentration, liquidity in stress, methodology drift, replication risk.
 - selectionRationale filters: List the specific screening criteria applied (expense ratio threshold, AUM floor, exposure check).
@@ -219,7 +235,7 @@ When answering:
 
 JSON field guidance for this section:
 - macroView: Reframe as a strategy context statement. Describe the investor objective, risk posture, and time horizon implied by the question. 2-3 sentences.
-- reasoning (per recommendation): Explain the portfolio role of this ETF — which sleeve it fills, what it diversifies against, and why it was chosen over alternatives.
+- reasoning (per recommendation): 3-6 sentences — explain the portfolio role of this ETF (which sleeve it fills, what it diversifies against), why it was chosen over alternatives, what risk could undermine its role in the portfolio, and what conditions would trigger a trim or replacement.
 - education: Define one portfolio construction concept (e.g. core-satellite, factor tilt, duration matching, rebalancing) with a plain English analogy.
 - keyRisks: Focus on portfolio-level risks — overlap, concentration, rebalancing drag, strategy drift under stress.
 - selectionRationale summary: Explain how you mapped the user's objective to a strategy framework and then selected ETFs that implement it.
@@ -312,11 +328,25 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
     // ── Build messages array (supports multi-turn) ────────────────────────
     const messages: { role: string; content: string }[] = [
       { role: 'system', content: buildSectionPrompt(section) },
-      // Inject prior turns (flatten to text to keep prompt tight)
-      ...history.slice(-2).map(h => ({  // max 2 prior turns to limit tokens
-        role:    h.role as 'user' | 'assistant',
-        content: h.content,
-      })),
+      // Inject prior turns — assistant turns are summarised from JSON to plain text
+      // so the AI can use them as conversational context for follow-up questions
+      ...history.slice(-4).map(h => {
+        if (h.role === 'assistant') {
+          try {
+            const prev = JSON.parse(h.content) as ChatResponse;
+            const content = [
+              `Previous analysis: ${prev.analysis?.macroView ?? ''}`,
+              `Sentiment: ${prev.analysis?.sentiment ?? ''}`,
+              `Recommended ETFs: ${prev.recommendations?.map(r => `${r.ticker} — ${r.reasoning?.substring(0, 200)}`).join('; ') ?? 'none'}`,
+              `Key risks: ${prev.analysis?.keyRisks?.join('; ') ?? ''}`,
+            ].filter(Boolean).join('\n');
+            return { role: 'assistant' as const, content };
+          } catch {
+            return { role: 'assistant' as const, content: h.content };
+          }
+        }
+        return { role: h.role as 'user' | 'assistant', content: h.content };
+      }),
       { role: 'user', content: userMessage },
     ];
 
@@ -327,7 +357,7 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
         {
           model,
           temperature: 0.3,
-          max_tokens:  1800,
+          max_tokens:  2200,
           messages,
         },
         {
@@ -400,6 +430,11 @@ export async function aiChatRoutes(fastify: FastifyInstance) {
           rec.metrics = real
             ? { return1M: real.return1M, return3M: real.return3M, volatility: real.volatility, sharpe: real.sharpe, maxDrawdown: real.maxDrawdown }
             : { return1M: null, return3M: null, volatility: null, sharpe: null, maxDrawdown: null };
+          // Normalise new Codex-derived fields — default safely if AI omitted them
+          if (!rec.recommended_action) rec.recommended_action = 'maintain_position';
+          if (!rec.portfolio_action)   rec.portfolio_action   = 'hold';
+          if (typeof rec.watchlist_flag !== 'boolean') rec.watchlist_flag = false;
+          if (!rec.outcome_note)       rec.outcome_note       = '';
         }
       }
 
